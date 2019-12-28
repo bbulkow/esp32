@@ -83,4 +83,67 @@ one called Docker, or one that does Graphics called VMWare.
 Here is my cookbook of all the things I ran into trying to set up ESP-IDF with WSL. I think it's more
 comprehensive than other guides I've read.
 
- 
+## Installation notes
+
+Environment: Ubuntu 18 WSL, fully patched. Windows 10 with all updates ( slow ring ) as of Dec 2019.
+
+Almost certainly, you will want to install on NTFS, so you can use your favorite windows editors
+and dev system. Mine is Sublime 3. 
+
+I wasn't able to build from source. The problem I ran into was `stat` being picky, but
+realistically this isn't a combo the maintainers use, so you might run into another problem. Nicely,
+the maintainer replied nearly immediately and you'll probably have a different problem.
+
+It seems that python2 is required. ESP-IDF doesn't seem to work with Python3, even though py2 will go EOL.
+
+If you use a python environment system ( I use pyenv ), you'll need to be careful about
+installing python libraries. I decided to change 'pyenv' back to 'system', but it is
+better to install the python libraries required using `pip` [ todo, put in better instructions ]
+
+The instructions talk about putting esp-idf's 'export.sh' into your bash profile.
+I wouldn't recommend that, because it takes about 2 to 3 seconds to parse in.
+
+It is probably best to set the IDF environment and not use things in the home directory.
+[ TODO: how to do that ]
+
+## Serial ports
+
+Shockingly, the serial port worked great! Although the instructions online weren't right.
+
+First, do the typical action by finding the COM port by opening your windows device manager.
+
+Second, have your ESP32 attached and use something like PUTTY to make sure all the connection is good.
+If you reboot, then connect, you'll see the initial statments of the ESP32. It won't be listening, but you'll know your serial port works with Windows.
+
+Then, you need to close that program ( there is a friendly error message ), and use linux
+tools. I tried 'cu' and that didn't work, but the idf.py monitor did work. See below for
+getting idf running.
+
+The official instructions talk about chmod /dev/ttyS? to 666. I did this but am not sure it
+made a difference.
+
+The name of the device is /dev/ttyS? , where `?` is the windows number. You can't just look at the devs that "exist" because all of them are pre-created.
+
+```
+idf.py -p /dev/ttyS7 monitor
+```
+
+## Use cheat sheets
+
+```
+cd $D/esp/esp-idf
+. ./export.sh
+```
+
+After this point, everything is idf.py .
+
+## Project structure in IDF
+
+NTS: turn on ccache
+
+-- IDF_TARGET not set, using default target: esp32
+
+IDF_PATH
+IDF_PYTHON_ENV_PATH
+
+Executing action: menuconfig                                                                                                                                                                                                      Running cmake in directory /mnt/c/Users/bbulk/dev/esp/esp32/hello_world/build                                                                                                                                                     Executing "cmake -G 'Unix Makefiles' -DPYTHON_DEPS_CHECKED=1 -DESP_PLATFORM=1 --warn-uninitialized -DCCACHE_ENABLE=0 /mnt/c/Users/bbulk/dev/esp/esp32/hello_world"...                                                             Warn about uninitialized values.                                                                                                                                                                                                  -- Found Git: /usr/bin/git (found version "2.17.1")     
