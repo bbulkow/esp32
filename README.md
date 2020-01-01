@@ -100,6 +100,13 @@ If you use a python environment system ( I use pyenv ), you'll need to be carefu
 installing python libraries. I decided to change 'pyenv' back to 'system', but it is
 better to install the python libraries required using `pip` [ todo, put in better instructions ]
 
+If you don't set IDF_TOOLS_PATH , there will be a $HOME/.espressif directory created
+when ./install.sh is run. 
+
+```
+export IDF_TOOLS_PATH="$D/esp/espressif"   
+```
+
 The instructions talk about putting esp-idf's 'export.sh' into your bash profile.
 I wouldn't recommend that, because it takes about 2 to 3 seconds to parse in.
 
