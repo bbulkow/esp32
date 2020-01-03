@@ -6,7 +6,8 @@ github
 
 As of 2019, the ESP32 is a high MHZ, dual core system with Wifi and Bluetooth LE that costs
 ten dollars ( available at Mouser and Digikey at that price for the "dev boards", and also
-different ESP systems are available at AdaFruit and Sparkfun for more like $25).
+different ESP systems are available at AdaFruit and Sparkfun for more like $25). ESP32
+systems similar to the dev boards are available on AliExpress for $4.
 
 If you need to go cheaper, and you have the ESP8266. It has half the cores, half the processors,
 and is closer to $2 ( aliexpress ) and $4.
@@ -24,7 +25,16 @@ Classic ATmega systems, at this point, look quite dated and expensive compared t
 the ESP systems. The idea that you'd spend $25 to $35 for a system with only 16Mhz and 2Kb
 and no built-in network just seems unnecessary.
 
-Other embedded systems
+The hottest thing in 2019 that's not the ESP32 are two different flavors of ARM
+processors. The Sparkfun Artemis is ARM based, supports all the Arduino, and has
+the kind of performance and RAM footprint of an ESP32 - all for $17 each. The Artemis
+is a unique concept in that Sparkfun has orchtestrated the core module to also be
+capable of high scale production use. In the other corner, we have the latest Adafruit
+Feather boards, also ARM based, supporting Arduino.
+
+However, neither of these boards support Wifi or Ethernet in a sensible way, nor
+do they support OTA ( over the air updates ). Having a true MQTT stack that runs over
+wireless is getting to be cooler and cooler, for simply plug-and-go use.
 
 ## ESP32 vs ESP8266
 
@@ -54,6 +64,22 @@ to limit fragmentation.
 FreeRTOS seems have them, and they're really good looking and basic.
 
 Even more interestingly, FreeRTOS allows Arduino libraries and headers.
+
+## Lua? Really?
+
+Yes, there is a Lua development environment. It's called NodeMCU, and 
+it maintained. It runs on top of the ESP-IDF toolchain.
+
+## Python? That's more like it
+
+Micropython seems well supported on the ESP32. Check out the micropython docs.
+
+https://docs.micropython.org/en/latest/esp32/tutorial/intro.html
+
+Nicely, this supports the neopixel driver - would be nicer if it was just
+an LED driver that drove all sorts of things like FastLED.
+
+Not trying this.
 
 # ESP32, ESP-IDF, and WSL
 
@@ -92,16 +118,18 @@ and dev system. Mine is Sublime 3.
 
 I wasn't able to build from source. The problem I ran into was `stat` being picky, but
 realistically this isn't a combo the maintainers use, so you might run into another problem. Nicely,
-the maintainer replied nearly immediately and you'll probably have a different problem.
+the maintainer replied nearly immediately and will likely have a fix in a few weeks, however, it's clear that WSL is not yet popular enough to have good maintance ( it happens ). You'll probably have a different problem.
 
 It seems that python2 is required. ESP-IDF doesn't seem to work with Python3, even though py2 will go EOL.
 
 If you use a python environment system ( I use pyenv ), you'll need to be careful about
 installing python libraries. I decided to change 'pyenv' back to 'system', but it is
-better to install the python libraries required using `pip` [ todo, put in better instructions ]
+better to install the python libraries required using `pip` [ todo, put in better instructions ]. 
 
 If you don't set IDF_TOOLS_PATH , there will be a $HOME/.espressif directory created
-when ./install.sh is run. 
+when ./install.sh is run. In WSL, you might want to think about the location, because
+WSL and WSL2 has very different ideas about file system performance. I preferred to pull
+out these directories into NTFS.
 
 ```
 export IDF_TOOLS_PATH="$D/esp/espressif"   
@@ -112,7 +140,7 @@ I wouldn't recommend that, because it takes about 2 to 3 seconds to parse in. Ha
 command line to this extra part even when I'm not working on my ESP32 project is a bit
 much.
 
-I have set the following environment variables. The purpose of moving the IDF TOOLS into the Windows partition was performance, but under WSL2 it would be better to put it under WSL. It's unclear in the documentation whether having IDF_PATH and IDF_TARGET defined are a good idea or not, but they don't seem to hurt.
+I have set the following environment variables. 
 
 ```
 export IDF_TOOLS_PATH="$D/esp/espressif"
@@ -143,6 +171,32 @@ made a difference.
 idf.py -p /dev/ttyS7 monitor
 ```
 
+## Pick your fork!
+
+When using ESP-IDF, please remember that the master you clone is the dangerous bleeding
+edge. I don't yet know how dangerous, but I'm not itching to find out. When you fetch
+ESP-IDF, you almost certainly want to choose a branch. As of today, that branch is
+almost certainly the 4.0 release branch or the 3.3 release branch. There are apparently
+incompatibilities, and code that you write ( or reuse ) should be clear about whether
+its written for 3.x or 4.x.
+
+See the above section about setting the IDF_TOOLS_PATH, because if you want a non-standard location for the idf-tools you'll need to change that before the install and have it set
+as an environment variable during install.
+
+```
+git clone --recursive --branch release/4.0 https://github.com/espressif/esp-idf
+cd esp-idf
+./install.sh
+```
+
+or
+
+```
+git clone --recursive --branch release/3.3 https://github.com/espressif/esp-idf 
+cd esp-idf
+./install.sh
+```
+
 ## Use cheat sheets
 
 ```
@@ -154,5 +208,59 @@ After this point, everything is idf.py .
 
 ## Project structure in IDF
 
-NTS: turn on ccache?
+# ESP32's in the wild
 
+## reminder blink pin
+
+The blink pin is set in menuconfig at the top level under 'example configuration'
+
+## DevKitV1
+
+This is fairly popular. It has a 240Mhz clock speed, uses DIO like most boards,
+and the standard crystal speed. It's pinouts can be found through this tutorial
+https://randomnerdtutorials.com/esp32-pinout-reference-gpios/ .
+
+I got these from Amazon at a price of $7 ( $14 for two). They're all over
+aliexpress as low as $4.
+
+Notably, the Blink pin is 2, so your first tutorial works. This is changed
+under menuconfig.
+
+In order to flash this board, you'll need to hold down the 'boot' while
+running the Flash program until it succeeds.
+
+## DevKitV4
+
+These are sold in the US by Mouser and Digikey. They come with a number of pin
+formats, and parts with a `-F` are "female", which appears to be the new format.
+I have these on order.
+
+## SparkFun Thing
+
+This device needs the XTAL clock set to 26 ( or autodetect ), which is not standard.
+
+It does not require pressing pins to reflash! OMG!
+
+Otherwise, it's a pretty standard looking WROOM32, with DIO and 4MB and whatnot.
+
+## The elusive LOLIN D32 Mini
+
+The most intersting form factor I've seen is an ESP32 form factor ( the short one ),
+but with two rows of pins on each side for the extra GPIO devices. It appears that
+Lolin has discontinued this board, so either it was unpopular due to form factor,
+or unpopular because there were particular signal and/or reliability issues.
+
+## What about ethernet?
+
+I have found three ESP32 boards with on-board ethernet. One is the Espressif ESP32-Ethernet-Kit V1.1, which is available at Mouser and Digikey at ( gulp ) $50,
+and the wESP ( wired esp ) at https://wesp32.com , and the Olimex board
+for about $20 https://www.olimex.com/Products/IoT/ESP32/ESP32-POE/open-source-hardware .
+The Olimex has scary statements about how to power, or not power the board
+and the amount of isolation they have between Ethernet and USB.
+
+## NodeMCU
+
+THis was a popular ESP8266 development board form factor. Although there
+are some signs of an ESP32 variant, it appears they're really discussing
+using the NodeMCU software stack https://nodemcu.readthedocs.io/en/dev-esp32/ on
+top of one of the other ESP32 boards.
