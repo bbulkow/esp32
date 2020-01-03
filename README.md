@@ -108,28 +108,36 @@ export IDF_TOOLS_PATH="$D/esp/espressif"
 ```
 
 The instructions talk about putting esp-idf's 'export.sh' into your bash profile.
-I wouldn't recommend that, because it takes about 2 to 3 seconds to parse in.
+I wouldn't recommend that, because it takes about 2 to 3 seconds to parse in. Having every
+command line to this extra part even when I'm not working on my ESP32 project is a bit
+much.
 
-It is probably best to set the IDF environment and not use things in the home directory.
-[ TODO: how to do that ]
+I have set the following environment variables. The purpose of moving the IDF TOOLS into the Windows partition was performance, but under WSL2 it would be better to put it under WSL. It's unclear in the documentation whether having IDF_PATH and IDF_TARGET defined are a good idea or not, but they don't seem to hurt.
+
+```
+export IDF_TOOLS_PATH="$D/esp/espressif"
+export IDF_PATH="$D/esp/esp-idf"
+export IDF_TARGET="esp32"
+```
 
 ## Serial ports
 
-Shockingly, the serial port worked great! Although the instructions online weren't right.
+Shockingly, the serial port worked great! Although the instructions online weren't right, and I didn't succeed in getting rates above 115200
 
-First, do the typical action by finding the COM port by opening your windows device manager.
+First, do the typical action by finding the COM port of your board by opening your windows device manager. COM port seems to change based on both the hardware port on your computer, and the physical board you're using.
 
 Second, have your ESP32 attached and use something like PUTTY to make sure all the connection is good.
-If you reboot, then connect, you'll see the initial statments of the ESP32. It won't be listening, but you'll know your serial port works with Windows.
+If you reboot, then connect, you'll see the initial statments of the ESP32 bootloader. It won't be listening, but you'll know your serial port works with Windows.
 
-Then, you need to close that program ( there is a friendly error message ), and use linux
+Then, you need to close that program ( there is a friendly error message about windows having the device open if you forget ), and use linux
 tools. I tried 'cu' and that didn't work, but the idf.py monitor did work. See below for
 getting idf running.
+
+The name of the device is /dev/ttyS? , where `?` is the windows number. You can't just look at the devs that "exist" because all of them are pre-created.
 
 The official instructions talk about chmod /dev/ttyS? to 666. I did this but am not sure it
 made a difference.
 
-The name of the device is /dev/ttyS? , where `?` is the windows number. You can't just look at the devs that "exist" because all of them are pre-created.
 
 ```
 idf.py -p /dev/ttyS7 monitor
@@ -146,11 +154,5 @@ After this point, everything is idf.py .
 
 ## Project structure in IDF
 
-NTS: turn on ccache
+NTS: turn on ccache?
 
--- IDF_TARGET not set, using default target: esp32
-
-IDF_PATH
-IDF_PYTHON_ENV_PATH
-
-Executing action: menuconfig                                                                                                                                                                                                      Running cmake in directory /mnt/c/Users/bbulk/dev/esp/esp32/hello_world/build                                                                                                                                                     Executing "cmake -G 'Unix Makefiles' -DPYTHON_DEPS_CHECKED=1 -DESP_PLATFORM=1 --warn-uninitialized -DCCACHE_ENABLE=0 /mnt/c/Users/bbulk/dev/esp/esp32/hello_world"...                                                             Warn about uninitialized values.                                                                                                                                                                                                  -- Found Git: /usr/bin/git (found version "2.17.1")     
