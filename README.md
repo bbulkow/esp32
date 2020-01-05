@@ -204,11 +204,15 @@ cd $D/esp/esp-idf
 . ./export.sh
 ```
 
+Remember that if the monitor is open, you can't flash your device. Annoyingly, you might
+want to have monitor open to see that the button is working, but then you have to
+close monitor ( CTL-] ).
+
 After this point, everything is idf.py .
 
 ## Project structure in IDF
 
-# ESP32's in the wild
+# ESP32s in the wild
 
 ## reminder blink pin
 
