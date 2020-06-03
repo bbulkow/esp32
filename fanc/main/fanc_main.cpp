@@ -42,9 +42,9 @@ void app_main(void)
     printf(" starting wifi\n");
     wifi_multi_start();
     
-    wifi_multi_ap_add("sisyphus", "!medea4u");
-    wifi_multi_ap_add("bb-ap-x", "landshark");
-    wifi_multi_ap_add("laertes", "!medea4u");
+    wifi_multi_ap_add("sisyphus", "x");
+    wifi_multi_ap_add("bb-ap-x", "x");
+    wifi_multi_ap_add("laertes", "x");
     printf("finished configuring wifi\n");
 
     // start the fanc task
