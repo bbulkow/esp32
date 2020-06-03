@@ -1,0 +1,277 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en-us" xml:lang="en-us">
+<head>
+	<link rel="stylesheet" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css"/>
+	<!-- <link href="./main.css" rel="stylesheet" type="text/css"> -->
+	<style type="text/css">
+		h2 {margin-bottom:2px;}
+		.hidden {display:none}
+	</style>
+	<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" /> 
+	<script type="text/javascript" src="./static?jquery.min.js"></script>
+	<script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js">
+	<script type="text/javascript">
+	</script>
+</head>
+<body style="margin-left:20px;">
+<div id="header">
+<div width="30%" style="float:left;">
+<h1>
+CheeseFan for Drying!
+</h1>
+</div>
+<div style="min-width:20;float:left">&nbsp;&nbsp;</div>
+<div >
+<img src="./static?cheese.jpg" width="200">
+</div>
+</div> <!-- end header -->
+<div id='temp'>
+<h2>Temperature</h2>
+<table>
+<tr>
+<td>Current:</td> <td><span id='temp_current'></span></td>
+</tr>
+<tr>
+<td>Setpoint:</td><td><span class='setpoint'></span></td>
+</tr>
+<tr>
+<td>Date:</td><td><span id='epoch'></span></td>
+</tr></table> 
+<button onclick="changeTemperatureSetpoint()">Change Setpoint</button>
+<div id="change_temperature_setpoint" class="hidden" title="Change Setpoint">
+	<form onsubmit="return submitNewTemperatureSetpoint()">
+	Enter new Temperature Setpoint (0-100):
+	<input type="text"></input>
+	<div class="hidden" style="color:red">
+		 Temperature Setpoint must be between 30 and 80
+	</div>
+	<input type="submit">
+	</form>
+</div>
+</div>
+<div id='humidity'>
+<h2>Humidity</h2>
+<table><tr>
+<td>Current:</td><td> <span id='humidity_current'></span></td>
+</tr><tr>
+<td>Setpoint:</td><td><span id='humidity_setpoint'></span> </td>
+</tr></table>
+<button onclick="changeHumiditySetpoint()">Change Setpoint</button>
+<div id="change_humidity_setpoint" class="hidden" title="Change Setpoint">
+	<form onsubmit = "return submitNewHumiditySetpoint()">
+	Enter new Humidity Setpoint (0-100):
+	<input type="text"></input>
+	<div class="hidden error" style="color:red">
+		 Humidity Setpoint must be between 0 and 100
+	</div>
+	<input type="submit">
+	</form>
+</div>
+<div id='image'>
+
+</div>
+
+</body>
+<script>
+$(document).ready(function() {
+	getHumidity();
+	getTemperature();
+	getEpoch();
+	getHumiditySetpoint();
+	getTemperatureSetpoint();
+	// getCaveStats();
+	// XXX need to set up image
+});
+
+function changeTemperatureSetpoint()
+{
+	$("#change_temperature_setpoint").dialog();
+}
+
+function changeHumiditySetpoint()
+{
+	$("#change_humidity_setpoint").dialog();
+}
+
+function submitNewHumiditySetpoint()
+{
+	try {
+		var newHumidity = parseInt($("#change_humidity_setpoint input").val());
+		if (isNaN(newHumidity) || newHumidity < 0 || newHumidity > 100) {
+			$('#change_humidity_setpoint div.error').css("display", "block");
+		} else {
+			setTargetHumidity(newHumidity);
+			console.log("new humidity is " + newHumidity);
+			$("#change_humidity_setpoint").dialog('close');
+			$('#change_humidity_setpoint div.error').css("display", "hidden");
+			$("#change_humidity_setpoint input[type='text']").val("");
+		}
+	} catch (NumberFormatException) {
+		$('#change_humidity_setpoint .error').css("display", "block");
+	}
+	return false;
+}
+
+function  submitNewTemperatureSetpoint()
+{
+	console.log("submit new temperature called");
+	try {
+		var newTemp = parseInt($("#change_temperature_setpoint input").val());
+		if (isNaN(newTemp) || newTemp < 32 || newTemp > 90) {
+			$('#change_temperature_setpoint div.error').css("display", "block");
+		} else {
+			setTargetTemperature(newTemp);
+			console.log("new temperature is " + newTemp);
+			$("#change_temperature_setpoint").dialog('close');
+			$('#change_temperature_setpoint div.error').css("display", "hidden");
+			$("#change_temperature_setpoint input[type='text']").val("");
+		}
+	} catch (NumberFormatException) {
+		$('#change_temperature_setpoint .error').css("display", "block");
+	}
+	return false;
+}
+
+
+
+function getCaveStats()
+{
+}
+
+function getHumidity()
+{
+	$.ajax({
+		type: 'GET',
+		url:"/rest/humidity",
+		success: function(data, status, req) {
+			if (data != "") {
+				console.log("data is " + data);
+				$("#humidity_current").html(data[0]);
+				//var humidity = $.parseJSON(data);
+			} else {
+				console.log("No data");
+			}
+				
+		},
+		error: function(req,status,errorThrown) {
+			printError("humidity get", req, status, errorThrown);
+		}
+	});
+}
+
+function getTemperature()
+{
+		$.ajax({
+		type: 'GET',
+		url:"/rest/temp",
+		success: function(data, status, req) {
+			if (data != "") {
+				$("#temp_current").html(data[0]);
+				//var humidity = $.parseJSON(data);
+			} else {
+				console.log("No data");
+			}
+				
+		},
+		error: function(req,status,errorThrown) {
+			printError("temp get", req, status, errorThrown);
+		}
+	});
+
+}
+
+function getEpoch()
+{
+	$.ajax({
+		type: 'GET',
+		url: "/rest/epoch",
+		success: function(data, status, req) {
+			if (data != "") {
+				var myDate = new Date(data[0]*1000);
+				$("#epoch").html(myDate.toLocaleString());	
+			}	
+		}
+	});
+}
+
+function getHumiditySetpoint()
+{
+	$.ajax({
+		type: 'GET',
+		url:"/rest/desired_humidity",
+		success: function(data, status, req) {
+			if (data != "") {
+				$("#humidity_setpoint").html(data[0]);
+				//var humidity = $.parseJSON(data);
+			} else {
+				console.log("No data");
+			}
+				
+		},
+		error: function(req,status,errorThrown) {
+			printError("humidity get setpoint", req, status, errorThrown);
+		}
+	});
+}
+
+function getTemperatureSetpoint()
+{
+	$.ajax({
+		type: 'GET',
+		url:"/rest/desired_temp",
+		success: function(data, status, req) {
+			if (data != "") {
+				$("#temp .setpoint").html(data[0]);
+				//var humidity = $.parseJSON(data);
+			} else {
+				console.log("No data");
+			}
+				
+		},
+		error: function(req,status,errorThrown) {
+			printError("temp get setpoint", req, status, errorThrown);
+		}
+	});
+}
+
+function setTargetTemperature(temp)
+{
+	console.log("attempting to set target temperature");
+	$.ajax({
+		type: 'POST',
+		url: "/rest/",
+		data: {desired_temperature:temp},
+		success: function(data, status,req) {
+			$("#temp .setpoint").html(temp);
+		},
+		error: function(req,status,errorThrown) {
+			printError("Could not set temperature setpoint");
+		}
+	});
+}
+
+function setTargetHumidity(humidity)
+{
+	console.log("attemptint to set target humidity")
+	$.ajax({
+		type: 'POST',
+		url: "/rest/",
+		data: {desired_humidity:humidity},
+		success: function(data, status,req) {
+				$("#humidity_setpoint").html(humidity);
+		},
+		error: function(req,status,errorThrown) {
+			printError("Could not set temperature setpoint");
+		}
+	});
+}
+
+
+function printError(origin, req, status, errorThrown)
+{
+	console.log(origin + " throws error "+ errorThrown);
+}
+
+
+</script>
+</html>

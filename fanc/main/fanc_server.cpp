@@ -31,11 +31,41 @@
 
 #include "fanc.h"
 
+// rest get calls will come here
+//
+
+esp_err_t rest_uri_handler(httpd_req_t *req) {
+
+    printf(" received rest URI request for %s\n",req->uri);
+
+    // did I get content?
+    printf(" content length is: %d\n",req->content_len);
+    
+    // what is the accept string?
+    size_t hdr_value_len = httpd_req_get_hdr_value_len(req, "Accept");
+    if (hdr_value_len) {
+        char *value =(char *)malloc(hdr_value_len+1);
+        httpd_req_get_hdr_value_str(req, "Accept", value, hdr_value_len );
+        printf(" got accept header: %s\n",value);
+        free(value);
+    }
+
+    return(ESP_OK);
+}
+
+
 //
 // I have used 'embed files' in the build system to include a small test jpeg
 
 extern const uint8_t server_cheese_jpg_start[] asm("_binary_cheese_jpg_start");
 extern const uint8_t server_cheese_jpg_end[] asm("_binary_cheese_jpg_end");
+
+extern const uint8_t server_index_html_start[] asm("_binary_index_html_start");
+extern const uint8_t server_index_html_end[] asm("_binary_index_html_end");
+
+extern const uint8_t server_jquery_min_js_start[] asm("_binary_jquery_min_js_start");
+extern const uint8_t server_jquery_min_js_end[] asm("_binary_jquery_min_js_end");
+
 
 typedef struct static_content_s {
     const char *name;
@@ -48,12 +78,25 @@ typedef struct static_content_s {
 // over a defined list without having the size of the list.
 // Yet, let's give the modern world a try
 
-static std::array<static_content_t, 1> static_contents {
+// regarding extra braces: this requirement was removed at some point in the C++11 spec
+// not sure why it's being required here...
+
+// I'm going to mandate that "index.html", ie, what you want served out of the
+// root, will always be first
+
+static std::array<static_content_t, 3> static_contents = { {
     {
-    "cheese.jpg", "image/png", 
+    "index.html", "text/html", 
+        server_index_html_start, ( server_index_html_end - server_index_html_start)
+    },    {
+    "cheese.jpg", "image/jpg", 
         server_cheese_jpg_start, ( server_cheese_jpg_end - server_cheese_jpg_start)
+    },
+    {
+    "jquery.min.js", "text/javascript", 
+        server_jquery_min_js_start, ( server_jquery_min_js_end - server_jquery_min_js_start)
     }
-};
+} };
 
 
 esp_err_t static_uri_handler(httpd_req_t *req) {
@@ -110,8 +153,11 @@ esp_err_t root_uri_handler(httpd_req_t *req) {
 
     printf(" received root URI request for %s\n",req->uri);
 
-    const char resp[] = "Hello World Root Response";
-    httpd_resp_send(req, resp, strlen(resp));
+    // by convention, whatever is 0 will be served out of root
+    static_content_t *root = &static_contents[0];
+
+    httpd_resp_set_type(req, root->content_type);
+    httpd_resp_send(req, (const char *) root->buf, root->buf_len);
 
     return( ESP_OK );
 }
@@ -130,6 +176,13 @@ httpd_uri_t uri_root {
     .user_ctx = NULL
 };
 
+httpd_uri_t uri_rest {
+    .uri = "/rest/*",
+    .method = HTTP_GET,
+    .handler = rest_uri_handler,
+    .user_ctx = NULL
+};
+
 static httpd_handle_t g_httpserver = NULL;
 
 esp_err_t webserver_init(void) {
@@ -141,6 +194,8 @@ esp_err_t webserver_init(void) {
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 80;
+     // this server does match wildcards if you use a fancier function
+    config.uri_match_fn = httpd_uri_match_wildcard;
     // there's a globaluserctx that gets passed on responses
 
 
@@ -150,13 +205,18 @@ esp_err_t webserver_init(void) {
         return(ESP_FAIL);
     }
 
+    // dynamic index URI
+    err = httpd_register_uri_handler(g_httpserver, &uri_root);
+    if (err != ESP_OK) printf(" could not register root handler %d %s\n",err,esp_err_to_name(err));
+
     // static pages URI
     err = httpd_register_uri_handler(g_httpserver, &uri_static);
     if (err != ESP_OK) printf(" could not register static handler %d %s\n",err,esp_err_to_name(err));
 
-    // dynamic index URI
-    err = httpd_register_uri_handler(g_httpserver, &uri_root);
-    if (err != ESP_OK) printf(" could not register root handler %d %s\n",err,esp_err_to_name(err));
+    // rest pages URI
+    err = httpd_register_uri_handler(g_httpserver, &uri_rest);
+    if (err != ESP_OK) printf(" could not register rest handler %d %s\n",err,esp_err_to_name(err));
+
 
     printf(" webserver init success!!!!\n");
 
