@@ -13,6 +13,7 @@
 #include "driver/ledc.h"
 #include "nvs_flash.h"
 #include "mdns.h"
+#include "esp_sntp.h"
 
 #include "WiFiMulti-idf.h"
 
@@ -42,10 +43,16 @@ void app_main(void)
     printf(" starting wifi\n");
     wifi_multi_start();
     
-    wifi_multi_ap_add("sisyphus", "x");
-    wifi_multi_ap_add("bb-ap-x", "x");
-    wifi_multi_ap_add("laertes", "x");
+    wifi_multi_ap_add("sisyphus", "!medea4u");
+    wifi_multi_ap_add("bb-ap-x", "landshark");
+    wifi_multi_ap_add("laertes", "!medea4u");
     printf("finished configuring wifi\n");
+
+    // why not get network time, if it's out there?
+    sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "us.pool.ntp.org");
+    sntp_init();
 
     // start the fanc task
     fanc_init();

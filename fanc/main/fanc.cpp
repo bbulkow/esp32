@@ -26,6 +26,101 @@
 
 #include "fanc.h"
 
+//
+// The percentage currently set for the configured fan
+//
+
+static int g_fanc_percentage = 100; // start at full-on
+
+
+int fanc_get_percentage(void) {
+    return(g_fanc_percentage);
+}
+
+
+esp_err_t fanc_set_percentage(int p) {
+    if (p > 100 || p < 0) return(ESP_FAIL);
+    g_fanc_percentage = p;
+    // update everything
+    return(ESP_OK);
+}
+
+
+/*
+** use the NVS module to store a value, and get the persistant value on restart
+** will simply opulate the global. No point in paying attention to an error
+*/
+
+static void fanc_persist_restore(void) {
+
+    nvs_handle_t nvs_h;
+    esp_err_t err = nvs_open("fanc", NVS_READONLY, &nvs_h);
+    if (err != ESP_OK) {
+        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+        return;
+    }
+
+    // Read
+    printf("Reading restart counter from NVS ... ");
+    int32_t fan_pct = 100; // value will default to 0, if not set yet in NVS
+    err = nvs_get_i32(nvs_h, "fan_pct", &fan_pct);
+    switch (err) {
+        case ESP_OK:
+            printf("Retrieved: value is %d\n",fan_pct);
+            g_fanc_percentage = fan_pct;
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            printf("The value is not initialized yet!\n");
+            break;
+        default :
+            printf("Error (%s) reading!\n", esp_err_to_name(err));
+    }
+
+    // Close
+    nvs_close(nvs_h);
+
+    return;
+}
+
+/*
+** use the NVS module to store a value, and get the persistant value on restart
+** will simply opulate the global. No point in paying attention to an error
+*/
+
+static void fanc_persist_update(void) {
+
+    nvs_handle_t nvs_h;
+    esp_err_t err = nvs_open("fanc", NVS_READWRITE, &nvs_h);
+    if (err != ESP_OK) {
+        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+        return;
+    }
+
+    // Write
+    printf("Writing value to NVS ... ");
+    int32_t fan_pct = g_fanc_percentage; // value will default to 0, if not set yet in NVS
+    err = nvs_set_i32(nvs_h, "fan_pct", fan_pct);
+    switch (err) {
+        case ESP_OK:
+            printf("set: value is %d\n",fan_pct);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            printf("The value is not initialized yet!\n");
+            break;
+        default :
+            printf("Error (%s) reading!\n", esp_err_to_name(err));
+    }
+
+    printf("Committing updates in NVS ... ");
+    err = nvs_commit(nvs_h);
+    printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+
+    // Close
+    nvs_close(nvs_h);
+
+    return;
+}
+
 
 /*
  * About this example
@@ -138,6 +233,9 @@ static void fanc_task(void *pvParameters)
 
     esp_err_t err;
 
+    // get prior value from NVS
+    fanc_persist_restore();
+
     // set up timer0
     err = ledc_timer_config(&ledc_test_timer);
     if (err == ESP_OK) printf(" succeeded configing timer\n");
@@ -152,8 +250,37 @@ static void fanc_task(void *pvParameters)
     // Initialize fade service.--- let's not get too fancy yet
     //ledc_fade_func_install(0);
 
+    int last_value = -1;
+
     while (fanc_live) {
 
+
+        if (last_value != g_fanc_percentage) {
+
+            printf(" changing fan duty cycle: old value was %d new will be %d\n",last_value,g_fanc_percentage);
+
+            // use the most recent value
+            err = ledc_set_duty(LEDC_TEST_SPEED_MODE, LEDC_TEST_CHANNEL, 
+                duty_cycle_calculate(LEDC_TEST_TIMER_RESOLUTION, g_fanc_percentage ));
+            //if (err == ESP_OK) printf(" succeeded setting duty\n");
+            //else printf(" failed setting duty: error %d\n",err);
+
+            err = ledc_update_duty(LEDC_TEST_SPEED_MODE, LEDC_TEST_CHANNEL);
+            //if (err == ESP_OK) printf(" succeeded updating duty\n");
+            //else printf(" failed updating duty: error %d\n",err);
+
+            // write new value
+            fanc_persist_update();
+
+            last_value = g_fanc_percentage;
+
+        }
+
+        // secs between so you can tell what's happening
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+
+#if 0
         printf("LEDC increase duty without fade\n");
         for (int i = 0; i <= 100; i+=3) {
 
@@ -171,9 +298,8 @@ static void fanc_task(void *pvParameters)
 
             vTaskDelay(400 / portTICK_PERIOD_MS);
         }
+#endif
 
-
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
 

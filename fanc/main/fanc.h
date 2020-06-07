@@ -12,6 +12,9 @@
 esp_err_t fanc_init(void);
 void fanc_destroy(void);
 
+int fanc_get_percentage(void);
+esp_err_t fanc_set_percentage(int p);
+
 esp_err_t webserver_init(void);
 void webserver_destroy();
 

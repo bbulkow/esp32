@@ -9,7 +9,7 @@
 	</style>
 	<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" /> 
 	<script type="text/javascript" src="./static?jquery.min.js"></script>
-	<script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js">
+	<script src="http://code.jquery.com/ui/1.12.1/jquery-ui.js">
 	<script type="text/javascript">
 	</script>
 </head>
@@ -17,7 +17,9 @@
 <div id="header">
 <div width="30%" style="float:left;">
 <h1>
+
 CheeseFan for Drying!
+
 </h1>
 </div>
 <div style="min-width:20;float:left">&nbsp;&nbsp;</div>
@@ -25,148 +27,80 @@ CheeseFan for Drying!
 <img src="./static?cheese.jpg" width="200">
 </div>
 </div> <!-- end header -->
-<div id='temp'>
-<h2>Temperature</h2>
+
+<div id='fan_pct'>
+<h2>Fan Control</h2>
+<p>Control FanPct is percent between 0 and 100. Actual speed, if measured, is RPM.</p>
+<p></p>
+
 <table>
 <tr>
-<td>Current:</td> <td><span id='temp_current'></span></td>
+<td>Current Speed:</td> <td><span id='speed_current'></span></td>
 </tr>
+
 <tr>
-<td>Setpoint:</td><td><span class='setpoint'></span></td>
+<td>Percent Setpoint:</td> <td><span id='fan_pct_setpoint'></span></td>
 </tr>
+
 <tr>
 <td>Date:</td><td><span id='epoch'></span></td>
-</tr></table> 
-<button onclick="changeTemperatureSetpoint()">Change Setpoint</button>
-<div id="change_temperature_setpoint" class="hidden" title="Change Setpoint">
-	<form onsubmit="return submitNewTemperatureSetpoint()">
-	Enter new Temperature Setpoint (0-100):
-	<input type="text"></input>
-	<div class="hidden" style="color:red">
-		 Temperature Setpoint must be between 30 and 80
-	</div>
-	<input type="submit">
-	</form>
-</div>
-</div>
-<div id='humidity'>
-<h2>Humidity</h2>
-<table><tr>
-<td>Current:</td><td> <span id='humidity_current'></span></td>
-</tr><tr>
-<td>Setpoint:</td><td><span id='humidity_setpoint'></span> </td>
-</tr></table>
-<button onclick="changeHumiditySetpoint()">Change Setpoint</button>
-<div id="change_humidity_setpoint" class="hidden" title="Change Setpoint">
-	<form onsubmit = "return submitNewHumiditySetpoint()">
-	Enter new Humidity Setpoint (0-100):
+</tr>
+</table> 
+
+<button onclick="changeFanPctSetpoint()">Change Setpoint</button>
+
+<div id="change_fan_pct_setpoint" class="hidden" title="Change Setpoint">
+	<form onsubmit="return submitNewFanPctSetpoint()">
+	Enter new Percentage Setpoint (0-100):
 	<input type="text"></input>
 	<div class="hidden error" style="color:red">
-		 Humidity Setpoint must be between 0 and 100
+		 Speed Percentage must be between 0 and 100
 	</div>
 	<input type="submit">
 	</form>
 </div>
-<div id='image'>
-
 </div>
 
 </body>
+
 <script>
 $(document).ready(function() {
-	getHumidity();
-	getTemperature();
+	getFanPctSetpoint();
+	getFanSpeed();
 	getEpoch();
-	getHumiditySetpoint();
-	getTemperatureSetpoint();
-	// getCaveStats();
-	// XXX need to set up image
 });
 
-function changeTemperatureSetpoint()
-{
-	$("#change_temperature_setpoint").dialog();
-}
 
-function changeHumiditySetpoint()
+function  submitNewFanPctSetpoint()
 {
-	$("#change_humidity_setpoint").dialog();
-}
-
-function submitNewHumiditySetpoint()
-{
+	console.log("submit new fan pctcalled");
 	try {
-		var newHumidity = parseInt($("#change_humidity_setpoint input").val());
-		if (isNaN(newHumidity) || newHumidity < 0 || newHumidity > 100) {
-			$('#change_humidity_setpoint div.error').css("display", "block");
+		var newTemp = parseInt($("#change_fan_pct_setpoint input").val());
+		if (isNaN(newTemp) || newTemp < 0 || newTemp > 100) {
+			$('#change_fan_pct_setpoint div.error').css("display", "block");
 		} else {
-			setTargetHumidity(newHumidity);
-			console.log("new humidity is " + newHumidity);
-			$("#change_humidity_setpoint").dialog('close');
-			$('#change_humidity_setpoint div.error').css("display", "hidden");
-			$("#change_humidity_setpoint input[type='text']").val("");
+			setTargetFanPct(newTemp);
+			console.log("new fan pct is " + newTemp);
+			$("#change_fan_pct_setpoint").dialog('close');
+			$('#change_fan_pct_setpoint div.error').css("display", "hidden");
+			$("#change_fan_pct_setpoint input[type='text']").val("");
 		}
 	} catch (NumberFormatException) {
-		$('#change_humidity_setpoint .error').css("display", "block");
-	}
-	return false;
-}
-
-function  submitNewTemperatureSetpoint()
-{
-	console.log("submit new temperature called");
-	try {
-		var newTemp = parseInt($("#change_temperature_setpoint input").val());
-		if (isNaN(newTemp) || newTemp < 32 || newTemp > 90) {
-			$('#change_temperature_setpoint div.error').css("display", "block");
-		} else {
-			setTargetTemperature(newTemp);
-			console.log("new temperature is " + newTemp);
-			$("#change_temperature_setpoint").dialog('close');
-			$('#change_temperature_setpoint div.error').css("display", "hidden");
-			$("#change_temperature_setpoint input[type='text']").val("");
-		}
-	} catch (NumberFormatException) {
-		$('#change_temperature_setpoint .error').css("display", "block");
+		$('#change_fan_pct_setpoint .error').css("display", "block");
 	}
 	return false;
 }
 
 
 
-function getCaveStats()
-{
-}
-
-function getHumidity()
-{
-	$.ajax({
-		type: 'GET',
-		url:"/rest/humidity",
-		success: function(data, status, req) {
-			if (data != "") {
-				console.log("data is " + data);
-				$("#humidity_current").html(data[0]);
-				//var humidity = $.parseJSON(data);
-			} else {
-				console.log("No data");
-			}
-				
-		},
-		error: function(req,status,errorThrown) {
-			printError("humidity get", req, status, errorThrown);
-		}
-	});
-}
-
-function getTemperature()
+function getFanSpeed()
 {
 		$.ajax({
 		type: 'GET',
-		url:"/rest/temp",
+		url:"/rest/speed",
 		success: function(data, status, req) {
 			if (data != "") {
-				$("#temp_current").html(data[0]);
+				$("#speed_current").html(data);
 				//var humidity = $.parseJSON(data);
 			} else {
 				console.log("No data");
@@ -194,14 +128,15 @@ function getEpoch()
 	});
 }
 
-function getHumiditySetpoint()
+
+function getFanPctSetpoint()
 {
 	$.ajax({
 		type: 'GET',
-		url:"/rest/desired_humidity",
+		url:"/rest/fan_pct",
 		success: function(data, status, req) {
 			if (data != "") {
-				$("#humidity_setpoint").html(data[0]);
+				$("#fan_pct_setpoint").html(data);
 				//var humidity = $.parseJSON(data);
 			} else {
 				console.log("No data");
@@ -209,69 +144,40 @@ function getHumiditySetpoint()
 				
 		},
 		error: function(req,status,errorThrown) {
-			printError("humidity get setpoint", req, status, errorThrown);
+			printError("fan pct setpoint", req, status, errorThrown);
 		}
 	});
 }
 
-function getTemperatureSetpoint()
-{
-	$.ajax({
-		type: 'GET',
-		url:"/rest/desired_temp",
-		success: function(data, status, req) {
-			if (data != "") {
-				$("#temp .setpoint").html(data[0]);
-				//var humidity = $.parseJSON(data);
-			} else {
-				console.log("No data");
-			}
-				
-		},
-		error: function(req,status,errorThrown) {
-			printError("temp get setpoint", req, status, errorThrown);
-		}
-	});
-}
+<!-- note this sends a little json object which is overkill but might be useful later -->
 
-function setTargetTemperature(temp)
+function setTargetFanPct(fan_pct)
 {
-	console.log("attempting to set target temperature");
+	console.log("attempting to set target fan percent");
 	$.ajax({
 		type: 'POST',
-		url: "/rest/",
-		data: {desired_temperature:temp},
+		url: "/rest/fan_pct",
+		data: "{\"fan_pct\":" + fan_pct + "}",
 		success: function(data, status,req) {
-			$("#temp .setpoint").html(temp);
+			$("#fan_pct .setpoint").html(fan_pct);
 		},
 		error: function(req,status,errorThrown) {
-			printError("Could not set temperature setpoint");
+			printError("Could not set fan pct setpoint");
 		}
 	});
 }
 
-function setTargetHumidity(humidity)
+
+function changeFanPctSetpoint()
 {
-	console.log("attemptint to set target humidity")
-	$.ajax({
-		type: 'POST',
-		url: "/rest/",
-		data: {desired_humidity:humidity},
-		success: function(data, status,req) {
-				$("#humidity_setpoint").html(humidity);
-		},
-		error: function(req,status,errorThrown) {
-			printError("Could not set temperature setpoint");
-		}
-	});
+	$("#change_fan_pct_setpoint").dialog();
 }
-
 
 function printError(origin, req, status, errorThrown)
 {
 	console.log(origin + " throws error "+ errorThrown);
 }
 
-
 </script>
+
 </html>
