@@ -18,6 +18,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/ledc.h"
+#include "driver/gpio.h"
 #include "nvs_flash.h"
 
 #include "WiFiMulti-idf.h"
@@ -27,18 +28,40 @@
 #include "fanc.h"
 
 //
+// These pins and values are for generating a PWM code 
+// for driving a "intel format" PWM fan.
+//
+
+#define LEDC_FANC_TIMER                LEDC_TIMER_0
+#define LEDC_FANC_SPEED_MODE           LEDC_LOW_SPEED_MODE
+#define LEDC_FANC_TIMER_HZ             24000
+#define LEDC_FANC_TIMER_RESOLUTION      LEDC_TIMER_8_BIT
+
+
+#define LEDC_FANC_GPIO              (18)
+#define LEDC_FANC_CHANNEL            LEDC_CHANNEL_0
+
+//
+// These values are for measuring the speed of the fan
+//
+#define FANC_PULSE_COUNT_GPIO       (GPIO_NUM_19)
+#define FANC_PULSE_COUNT_PIN_SEL  (1ULL << FANC_PULSE_COUNT_GPIO)
+
+
+
+//
 // The percentage currently set for the configured fan
 //
 
 static int g_fanc_percentage = 100; // start at full-on
 
 
-int fanc_get_percentage(void) {
+int fanc_percentage_get(void) {
     return(g_fanc_percentage);
 }
 
 
-esp_err_t fanc_set_percentage(int p) {
+esp_err_t fanc_percentage_set(int p) {
     if (p > 100 || p < 0) return(ESP_FAIL);
     g_fanc_percentage = p;
     // update everything
@@ -121,6 +144,97 @@ static void fanc_persist_update(void) {
     return;
 }
 
+/*
+** reading the speed of a fan
+**
+** esp_err_t gpio_intr_enable(gpio_num_t gpio_num) --- enables interrupts?
+**    get the current value
+** int gpio_get_level(gpio_num_t gpio_num)
+**    set direction to input
+** esp_err_t gpio_set_direction(gpio_num_t gpio_num, gpio_mode_t mode)
+**    allocate an interrupt handler for the GPIO in question?
+
+** esp_err_t gpio_isr_handler_add(gpio_num_t gpio_num, gpio_isr_t isr_handler, void *args)
+**     remove the handler?
+** esp_err_t gpio_isr_handler_remove(gpio_num_t gpio_num)
+
+**    set the interrupt type, that's how you get notified on rise, fall, etc
+**    GPIO_INTR_POSEDGE , ANYEDGE, etc
+** esp_err_t gpio_set_intr_type(gpio_num_t gpio_num, gpio_int_type_t intr_type);
+**
+** thus - pick a pin. Register a handler. Set the interrupt type.
+**   increment a global when called and returned, that simple, now you have a counter
+**   every time a rising edge happens
+
+ https://www.lucadentella.it/en/2017/02/25/esp32-12-io-e-interrupts/
+ */
+
+// This global will be incremented when the interrupt fires
+static uint32_t g_fanc_pulse_count = 0;
+static uint32_t g_fanc_previous_pulse_count = 0;
+static int64_t  g_fanc_previous_time = 0;
+static float g_fanc_rps = 0.0;
+
+
+static void IRAM_ATTR fanc_pulse_count_isr(void *p) {
+    g_fanc_pulse_count++;
+}
+
+// somewhat annoyingly, this will measure the 
+
+float fanc_speed_get(void) {
+
+	if (g_fanc_previous_time == 0) return(0.0);
+
+	return (g_fanc_rps);
+}
+
+// so annoying these must be the same order as the struct definition
+
+static gpio_config_t pulse_count_gpio = {
+    .pin_bit_mask = FANC_PULSE_COUNT_PIN_SEL,
+    .mode = GPIO_MODE_INPUT,
+    .pull_up_en = GPIO_PULLUP_DISABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type = GPIO_INTR_POSEDGE,
+};
+
+static esp_err_t fanc_pulse_count_init(void) {
+
+    esp_err_t   err;
+
+    err = gpio_config(&pulse_count_gpio);
+    if (err != ESP_OK) {
+        printf(" fanc_plus_count: could not configure gpio config\n");
+        return(err);
+    }
+
+    //gpio_set_direction(FANC_PULSE_COUNT_GPIO, GPIO_MODE_INPUT);
+    //gpio_set_intr_type(FANC_PULSE_COUNT_GPIO, GPIO_INTR_POSEDGE);
+
+    // example does not, a bit odd?
+    err = gpio_install_isr_service(0 /* default */);
+    if (err != ESP_OK) {
+        printf(" fanc_plus_count: could not add isr handler\n");
+        return(err);
+    }
+
+    err = gpio_isr_handler_add(FANC_PULSE_COUNT_GPIO, fanc_pulse_count_isr, 0 /* param for isr */);
+    if (err != ESP_OK) {
+        printf(" fanc_plus_count: could not add isr handler\n");
+        return(err);
+    }
+
+    err = gpio_intr_enable(FANC_PULSE_COUNT_GPIO);
+    if (err != ESP_OK) {
+        printf(" fanc_plus_count: could enable isr\n");
+        return(err);
+    }
+
+    printf(" fanc_pulse: successful init\n");
+    return(ESP_OK);
+}
+
 
 /*
  * About this example
@@ -162,16 +276,6 @@ Might be nice to have a function that maps percents based on the duty resolution
 // I have the suspicion that there is one set of channels for high speed, and one set
 // for low speed. 
 
-#define LEDC_TEST_TIMER                LEDC_TIMER_0
-//#define LEDC_TEST_SPEED_MODE           LEDC_HIGH_SPEED_MODE
-#define LEDC_TEST_SPEED_MODE           LEDC_LOW_SPEED_MODE
-#define LEDC_TEST_TIMER_HZ             24000
-#define LEDC_TEST_TIMER_RESOLUTION      LEDC_TIMER_10_BIT
-
-#define LEDC_TEST_GPIO        (13)
-#define LEDC_TEST_CHANNEL            LEDC_CHANNEL_0
-
-
 /* this interface works the following way:
 ** there are several timer channels.
 ** You'll allocate a timer and configure it for the speed you want ( high, low, hertz etc )
@@ -192,26 +296,24 @@ Might be nice to have a function that maps percents based on the duty resolution
  *         then frequency and bit_num of these channels
  *         will be the same
  */
-ledc_channel_config_t ledc_test_channel = {
-
-        .gpio_num   = LEDC_TEST_GPIO,
-        .speed_mode = LEDC_TEST_SPEED_MODE,
-        .channel    = LEDC_TEST_CHANNEL,
+static ledc_channel_config_t ledc_fanc_channel = {
+        .gpio_num   = LEDC_FANC_GPIO,
+        .speed_mode = LEDC_FANC_SPEED_MODE,
+        .channel    = LEDC_FANC_CHANNEL,
         .intr_type  = LEDC_INTR_DISABLE, // unclear if this is the fade interrupt or what
-        .timer_sel  = LEDC_TIMER_0,      // choose a value you already configured
+        .timer_sel  = LEDC_FANC_TIMER,      // choose a value you already configured
         .duty       = 0, /* starting duty? */
         .hpoint     = 0, /* no idea what this is for */
-
 };
 
 /* the example had the ordering wrong, but the example was C, which doesn't reorder.
 */
 
-ledc_timer_config_t ledc_test_timer = {
-    .speed_mode = LEDC_TEST_SPEED_MODE,          // low speed or high speed
-    .duty_resolution = LEDC_TEST_TIMER_RESOLUTION, // resolution of PWM duty
-    .timer_num = LEDC_TIMER_0,        // there are 4, let's use channel 0
-    .freq_hz = LEDC_TEST_TIMER_HZ,                     // frequency of PWM signal - happen to need 24k for fan control
+static ledc_timer_config_t ledc_fanc_timer = {
+    .speed_mode = LEDC_FANC_SPEED_MODE,          // low speed or high speed
+    .duty_resolution = LEDC_FANC_TIMER_RESOLUTION, // resolution of PWM duty
+    .timer_num = LEDC_FANC_TIMER,        // there are 4, let's use channel 0
+    .freq_hz = LEDC_FANC_TIMER_HZ,                     // frequency of PWM signal - happen to need 24k for fan control
     .clk_cfg = LEDC_AUTO_CLK            // auto select the source clock
 };
 
@@ -237,12 +339,12 @@ static void fanc_task(void *pvParameters)
     fanc_persist_restore();
 
     // set up timer0
-    err = ledc_timer_config(&ledc_test_timer);
+    err = ledc_timer_config(&ledc_fanc_timer);
     if (err == ESP_OK) printf(" succeeded configing timer\n");
     else printf(" could not configure timer: error %d\n",err);
 
     // Set up controller 0, which will start the pin outputting to level 0-
-    err = ledc_channel_config(&ledc_test_channel);
+    err = ledc_channel_config(&ledc_fanc_channel);
     if (err == ESP_OK) printf(" succeeded configing channel\n");
     else printf(" could not configure channel: error %d\n",err);
 
@@ -260,24 +362,38 @@ static void fanc_task(void *pvParameters)
             printf(" changing fan duty cycle: old value was %d new will be %d\n",last_value,g_fanc_percentage);
 
             // use the most recent value
-            err = ledc_set_duty(LEDC_TEST_SPEED_MODE, LEDC_TEST_CHANNEL, 
-                duty_cycle_calculate(LEDC_TEST_TIMER_RESOLUTION, g_fanc_percentage ));
+            err = ledc_set_duty(LEDC_FANC_SPEED_MODE, LEDC_FANC_CHANNEL, 
+                duty_cycle_calculate(LEDC_FANC_TIMER_RESOLUTION, g_fanc_percentage ));
             //if (err == ESP_OK) printf(" succeeded setting duty\n");
             //else printf(" failed setting duty: error %d\n",err);
 
-            err = ledc_update_duty(LEDC_TEST_SPEED_MODE, LEDC_TEST_CHANNEL);
+            err = ledc_update_duty(LEDC_FANC_SPEED_MODE, LEDC_FANC_CHANNEL);
             //if (err == ESP_OK) printf(" succeeded updating duty\n");
             //else printf(" failed updating duty: error %d\n",err);
 
             // write new value
             fanc_persist_update();
-
             last_value = g_fanc_percentage;
 
         }
 
-        // secs between so you can tell what's happening
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        // interesting thing here is the number of pulses seems wrong by almost
+        // every measure... is 37 revs per second a reasonable number? 
+
+        // how fast am I spinning?
+        uint32_t pulse_count = g_fanc_pulse_count;
+        int64_t  now = esp_timer_get_time(); // microseconds?
+
+
+		//printf("pulse counter change: %u was %u now %u\n", pulse_count - g_fanc_previous_pulse_count, g_fanc_previous_pulse_count, pulse_count);
+		g_fanc_rps = ((float)(pulse_count - g_fanc_previous_pulse_count)) / ((now - g_fanc_previous_time) / 1000000.0);
+		//printf(" revs per second: %f\n",g_fanc_rps);
+        g_fanc_previous_pulse_count = pulse_count;
+        g_fanc_previous_time = now;
+
+        // If you go too fast, the measurement will be poor, and we'll have to skip. Similarly,
+        // updating the fan speed too often's probably bad. I like a third of a second.
+        vTaskDelay(480 / portTICK_PERIOD_MS);
 
 
 #if 0
@@ -305,9 +421,14 @@ static void fanc_task(void *pvParameters)
 
 esp_err_t fanc_init(void) {
 
+    // input to grab sense pulses so we know how fast it's going
+    fanc_pulse_count_init();
+
     // kick off scan and connect tasks
     xTaskCreate(fanc_task, "fanc_task",4096/*stacksizewords*/, 
                 (void *) NULL/*param*/, 5 /*pri*/, &g_fancTask/*createdtask*/);
+
+
 
     return(ESP_OK);
 }

@@ -119,7 +119,7 @@ esp_err_t rest_uri_handler(httpd_req_t *req) {
         if (req->method == HTTP_GET) {
 
             char fan_pct_str[20];
-            snprintf(fan_pct_str, sizeof(fan_pct_str),"%d",fanc_get_percentage() );
+            snprintf(fan_pct_str, sizeof(fan_pct_str),"%d",fanc_percentage_get() );
 
             printf(" sending fan percentage %s\n",fan_pct_str);
 
@@ -133,7 +133,7 @@ esp_err_t rest_uri_handler(httpd_req_t *req) {
                 printf(" got a fan pct: %d\n",new_fan_pct);
             }
 
-            fanc_set_percentage(new_fan_pct);
+            fanc_percentage_set(new_fan_pct);
 
             // easiest way to say OK?
             httpd_resp_sendstr(req,"");

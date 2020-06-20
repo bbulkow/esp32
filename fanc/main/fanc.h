@@ -12,8 +12,11 @@
 esp_err_t fanc_init(void);
 void fanc_destroy(void);
 
-int fanc_get_percentage(void);
-esp_err_t fanc_set_percentage(int p);
+int fanc_percentage_get(void);
+esp_err_t fanc_percentage_set(int p);
+
+// attempting to be revolutions per second.
+float fanc_speed_get(void);
 
 esp_err_t webserver_init(void);
 void webserver_destroy();
