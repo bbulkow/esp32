@@ -28,13 +28,17 @@
 #include "freertos/task.h"
 
 #include "nvs_flash.h"
+#include "cJSON.h"
 
 #include "esp_http_server.h"
 #include "esp_err.h"
 
-#include "cJSON.h"
+#include "esp_log.h"
+static const char *TAG = "fanc";
 
 #include "fanc.h"
+
+
 
 // return the integer value of a json element which is in the root
 // Extensions: get a subitem with cJSON_GetObjectItem(parentCJson,child-string)
@@ -44,23 +48,23 @@
 // not sure what happens when we can't get the string, though
 static esp_err_t get_json_value_int(const char *json_str, const char *field, int *val) {
 
-    //printf(" getjsonvalueint: json %s field %s\n",json_str,field);
+    ESP_LOGV(TAG," getjsonvalueint: json %s field %s",json_str,field);
     const char *err_loc = 0;
     cJSON *root = cJSON_ParseWithOpts(json_str, &err_loc, false);
-    //printf(" cjson parse: root is %p\n",root);
+    ESP_LOGV(TAG," cjson parse: root is %p",root);
     if (! root) {
-        printf("could not parse json, error at postition: %d\n",(int)(err_loc - json_str) );
+        ESP_LOGV(TAG,"could not parse json, error at postition: %d",(int)(err_loc - json_str) );
         return(ESP_FAIL);
     }
 
     cJSON *field_object = cJSON_GetObjectItem(root,field);
     if (! field_object) {
-        printf(" JSON parse could not find %s in %s\n",field,json_str);
+        ESP_LOGD(TAG, " JSON parse could not find %s in %s",field,json_str);
         cJSON_Delete(root);
         return(ESP_FAIL);
     }
     if (! cJSON_IsNumber(field_object)) {
-        printf(" JSON did not find a number %s in %s\n",field,json_str);
+        ESP_LOGD(TAG, " JSON did not find a number %s in %s",field,json_str);
         cJSON_Delete(root);
         return(ESP_FAIL);
     }
@@ -78,24 +82,24 @@ static esp_err_t get_json_value_int(const char *json_str, const char *field, int
 
 esp_err_t rest_uri_handler(httpd_req_t *req) {
 
-    printf(" received rest URI request for %s method %d\n",req->uri,req->method);
+    ESP_LOGD(TAG," received rest URI request for %s method %d",req->uri,req->method);
 
     // did I get content?
 
     char *content = 0;
     if (req->content_len > 0) {
-        //printf(" content length is: %d\n",req->content_len);
+        //ESP_LOGD(TAG," content length is: %d",req->content_len);
         content =(char *)malloc(req->content_len + 1);
         int sz = httpd_req_recv(req, content, req->content_len);
-        //printf(" content sz is: %d\n",sz);
+        //ESP_LOGD(TAG," content sz is: %d",sz);
         if (sz != req->content_len) {
-            //printf(" could not retrieve content: %d\n",sz);
+            //ESP_LOGD(TAG," could not retrieve content: %d",sz);
             httpd_resp_send_500(req);
             free(content);
             return(ESP_OK);
         }
         content[req->content_len] = 0;
-        //printf(" content is: %s\n",content);
+        //ESP_LOGD(TAG," content is: %s",content);
     }
     
 // going to ignore accept headers...
@@ -105,10 +109,22 @@ esp_err_t rest_uri_handler(httpd_req_t *req) {
     if (hdr_value_len) {
         char *value =(char *)malloc(hdr_value_len+1);
         httpd_req_get_hdr_value_str(req, "Accept", value, hdr_value_len );
-        printf(" got accept header: %s\n",value);
+        ESP_LOGD(TAG," got accept header: %s",value);
+        free(value);
+    }
+
+    // what is the Connection string?
+    size_t hdr_value_len = httpd_req_get_hdr_value_len(req, "Connection");
+    if (hdr_value_len) {
+        char *value =(char *)malloc(hdr_value_len+1);
+        httpd_req_get_hdr_value_str(req, "Connection", value, hdr_value_len );
+        ESP_LOGD(TAG," got connection header: %s",value);
         free(value);
     }
 #endif
+
+    // doing this up here will set it for everything
+    httpd_resp_set_hdr(req,"Connection","close");
 
     // parse the URI so I can sub-dispatch?
     const char *last_slash = strrchr(req->uri, '/');
@@ -121,7 +137,7 @@ esp_err_t rest_uri_handler(httpd_req_t *req) {
             char fan_pct_str[20];
             snprintf(fan_pct_str, sizeof(fan_pct_str),"%d",fanc_percentage_get() );
 
-            printf(" sending fan percentage %s\n",fan_pct_str);
+            ESP_LOGI(TAG,"rest: sending fan percentage %s",fan_pct_str);
 
             httpd_resp_set_type(req, "text/plain");
             httpd_resp_sendstr(req, fan_pct_str);
@@ -130,20 +146,32 @@ esp_err_t rest_uri_handler(httpd_req_t *req) {
 
             int new_fan_pct = 0;
             if (ESP_OK == get_json_value_int(content, "fan_pct",&new_fan_pct)) {
-                printf(" got a fan pct: %d\n",new_fan_pct);
+                ESP_LOGI(TAG,"rest: posted, a fan pct to set: %d",new_fan_pct);
+
+                fanc_percentage_set(new_fan_pct);
+
+                // easiest way to say OK?
+                httpd_resp_sendstr(req,"");
             }
-
-            fanc_percentage_set(new_fan_pct);
-
-            // easiest way to say OK?
-            httpd_resp_sendstr(req,"");
+            else {
+                ESP_LOGW(TAG," posted, a json with a bad value fan pct");
+                httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"illegal value");
+            }
         }
 
     }
-    else if ( strcmp(last_slash, "speed") == 0) {
+    else if ( strcmp(last_slash, "fan_speed") == 0) {
 
-        printf(" endpoint speed not implemented\n");
-        httpd_resp_send_404(req);
+        if (req->method == HTTP_GET) {
+
+            char fan_speed_str[20];
+            snprintf(fan_speed_str, sizeof(fan_speed_str),"%.1f",fanc_speed_get() );
+
+            ESP_LOGI(TAG,"rest: sending fan speed %s",fan_speed_str);
+
+            httpd_resp_set_type(req, "text/plain");
+            httpd_resp_sendstr(req, fan_speed_str);
+        }
     }
     else if ( strcmp(last_slash, "uptime") == 0) {
 
@@ -152,7 +180,7 @@ esp_err_t rest_uri_handler(httpd_req_t *req) {
         char uptime_str[20];
         snprintf(uptime_str, sizeof(uptime_str),"%" PRIu64,uptime_sec);
 
-        printf(" sending uptime %s\n",uptime_str);
+        ESP_LOGI(TAG,"rest: sending uptime %s",uptime_str);
 
         httpd_resp_set_type(req, "text/plain");
         httpd_resp_sendstr(req, uptime_str);
@@ -165,14 +193,14 @@ esp_err_t rest_uri_handler(httpd_req_t *req) {
         // depending on config, time might be 64 bits, or 32.... play it safe
         snprintf(secs_str, sizeof(secs_str),"%" PRIu64,(uint64_t) secs);
 
-        printf(" sending epoch %s\n",secs_str);
+        ESP_LOGI(TAG,"rest: sending epoch %s",secs_str);
 
         httpd_resp_set_type(req, "text/plain");
         httpd_resp_sendstr(req, secs_str);
     }
 
     else {
-        printf(" unknown endpoint: %s\n",last_slash);
+        ESP_LOGI(TAG,"rest: unknown endpoint: %s",last_slash);
         httpd_resp_send_404(req);
     }
 
@@ -231,7 +259,11 @@ esp_err_t static_uri_handler(httpd_req_t *req) {
 
     esp_err_t err;
 
-    printf(" received static URI request for %s\n",req->uri);
+    ESP_LOGD(TAG," received static URI request for %s",req->uri);
+
+    // short lived connections
+    httpd_resp_set_hdr(req,"Connection","close");
+    httpd_resp_set_hdr(req,"Cache-Control","max-age=99999");
 
     size_t query_len = httpd_req_get_url_query_len(req);
     char *query = NULL;
@@ -241,12 +273,12 @@ esp_err_t static_uri_handler(httpd_req_t *req) {
 
         err = httpd_req_get_url_query_str(req, query, query_len);
         if (err) { 
-            printf(" could not get query string even with correct len %d %s\n",
+            ESP_LOGI(TAG,"static_http: could not get query string even with correct len %d %s",
                         err,esp_err_to_name(err));
             free(query);
             return(ESP_FAIL);
         }
-        printf(" static: query string %s\n",query);
+        ESP_LOGD(TAG," static: query string %s",query);
     }
 
     if (query) {
@@ -255,7 +287,7 @@ esp_err_t static_uri_handler(httpd_req_t *req) {
         bool found = false;
         for (auto& static_content : static_contents) {
             if (strcmp(static_content.name, query) == 0) {
-                printf(" sending %s response\n",query);
+                ESP_LOGD(TAG,"static_http: sending %s response",query);
                 httpd_resp_set_type(req, static_content.content_type);
                 httpd_resp_send(req, (const char *) static_content.buf, static_content.buf_len);
                 found = true;
@@ -263,7 +295,7 @@ esp_err_t static_uri_handler(httpd_req_t *req) {
             }
         }
         if ( found == false) {
-            printf(" query not found, sending 404\n");
+            ESP_LOGI(TAG,"static_http: query not found, sending 404");
             httpd_resp_send_404(req);
         }
         free(query);
@@ -271,7 +303,8 @@ esp_err_t static_uri_handler(httpd_req_t *req) {
     // todo: return an error on unknown queries
     else {
         // default
-        httpd_resp_sendstr(req, "Hello World static Response");
+        ESP_LOGI(TAG,"static_http: received no query, returing sill response");
+        httpd_resp_sendstr(req, "static server expecting query string");
     }
 
     return( ESP_OK );
@@ -279,7 +312,11 @@ esp_err_t static_uri_handler(httpd_req_t *req) {
 
 esp_err_t root_uri_handler(httpd_req_t *req) {
 
-    printf(" received root URI request for %s\n",req->uri);
+    ESP_LOGI(TAG," received root URI request for %s",req->uri);
+
+    // short lived connections
+    httpd_resp_set_hdr(req,"Connection","close");
+    httpd_resp_set_hdr(req,"Cache-Control","max-age=99999");
 
     // by convention, whatever is 0 will be served out of root
     static_content_t *root = &static_contents[0];
@@ -325,7 +362,7 @@ esp_err_t webserver_init(void) {
 
     esp_err_t err;
 
-    printf(" webserver init!!!\n");
+    ESP_LOGI(TAG," webserver init!!!");
 
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -337,29 +374,39 @@ esp_err_t webserver_init(void) {
 
     err = httpd_start( &g_httpserver, &config );
     if (err != ESP_OK) {
-        printf(" could not start http server, error %d %s\n",err,esp_err_to_name(err));
+        ESP_LOGW(TAG,"webserver_init: could not start http server, error %d %s",err,esp_err_to_name(err));
         return(ESP_FAIL);
     }
 
     // dynamic index URI
     err = httpd_register_uri_handler(g_httpserver, &uri_root);
-    if (err != ESP_OK) printf(" could not register root handler %d %s\n",err,esp_err_to_name(err));
+    if (err != ESP_OK) { 
+        ESP_LOGW(TAG, "webserver_init: could not register root handler %d %s",err,esp_err_to_name(err)); 
+        return(ESP_FAIL);
+    }
 
     // static pages URI
     err = httpd_register_uri_handler(g_httpserver, &uri_static);
-    if (err != ESP_OK) printf(" could not register static handler %d %s\n",err,esp_err_to_name(err));
+    if (err != ESP_OK) { 
+        ESP_LOGW(TAG, "webserver_init: could not register static handler %d %s",err,esp_err_to_name(err));         
+        return(ESP_FAIL);
+    }
 
     // rest get URI
     err = httpd_register_uri_handler(g_httpserver, &uri_rest_get);
-    if (err != ESP_OK) printf(" could not register rest get handler %d %s\n",err,esp_err_to_name(err));
+    if (err != ESP_OK) { 
+        ESP_LOGW(TAG, "webserver_init: could not register rest get handler %d %s",err,esp_err_to_name(err)); 
+        return(ESP_FAIL);
+    }
 
     // rest post URI
     err = httpd_register_uri_handler(g_httpserver, &uri_rest_post);
-    if (err != ESP_OK) printf(" could not register rest post handler %d %s\n",err,esp_err_to_name(err));
+    if (err != ESP_OK) { 
+        ESP_LOGW(TAG, "webserver_init: could not register rest post handler %d %s",err,esp_err_to_name(err)); 
+        return(ESP_FAIL);
+    }
 
-
-    printf(" webserver init success!!!!\n");
-
+    ESP_LOGI(TAG," webserver init success!!!!");
 
     return(ESP_OK);
 }

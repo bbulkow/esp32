@@ -19,6 +19,9 @@
 
 #include "esp_err.h"
 
+#include "esp_log.h"
+static const char *TAG = "fanc";
+
 #include "fanc.h"
 
 extern "C" {
@@ -28,6 +31,16 @@ extern "C" {
 
 void app_main(void)
 {
+    // logging is good
+    // Note the following:
+    // At compile time: in menuconfig, set the verbosity level using the option CONFIG_LOG_DEFAULT_LEVEL. 
+    //    All logging statements for verbosity levels higher than CONFIG_LOG_DEFAULT_LEVEL will be removed by the preprocessor.
+    // At runtime: all logs for verbosity levels lower than CONFIG_LOG_DEFAULT_LEVEL are enabled by default. 
+    //    The function esp_log_level_set() can be used to set a logging level on a per module basis. 
+    //    Modules are identified by their tags, which are human-readable ASCII zero-terminated strings.
+
+    // ESP_LOG_NONE, ESP_LOG_ERROR (error), ESP_LOG_WARN, ESP_LOG_INFO, ESP_LOG_DEBUG, ESP_LOG_VERBOSE
+    esp_log_level_set(TAG, ESP_LOG_DEBUG);
 
     // this seems to help the Wifi unit. Not so sure about that...
     esp_err_t ret = nvs_flash_init();
@@ -37,16 +50,14 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-
-
     // start the wifi service
-    printf(" starting wifi\n");
+    ESP_LOGI(TAG, " starting wifi");
     wifi_multi_start();
     
-    wifi_multi_ap_add("sisyphus", "!medea4u");
-    wifi_multi_ap_add("bb-ap-x", "landshark");
-    wifi_multi_ap_add("laertes", "!medea4u");
-    printf("finished configuring wifi\n");
+    wifi_multi_ap_add("sisyphus", "xxx");
+    wifi_multi_ap_add("bb-ap-x", "xxx");
+    wifi_multi_ap_add("laertes", "xxx");
+    ESP_LOGI(TAG, "finished configuring wifi");
 
     // why not get network time, if it's out there?
     sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
@@ -66,7 +77,6 @@ void app_main(void)
     mdns_hostname_set("fanc");
 
     while(1) {
-
 
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }

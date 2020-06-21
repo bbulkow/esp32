@@ -13,15 +13,18 @@
 	<script type="text/javascript">
 	</script>
 </head>
+
 <body style="margin-left:20px;">
 <div id="header">
+
 <div width="30%" style="float:left;">
 <h1>
 
 CheeseFan for Drying!
 
 </h1>
-</div>
+</div> 
+
 <div style="min-width:20;float:left">&nbsp;&nbsp;</div>
 <div >
 <img src="./static?cheese.jpg" width="200">
@@ -30,12 +33,12 @@ CheeseFan for Drying!
 
 <div id='fan_pct'>
 <h2>Fan Control</h2>
-<p>Control FanPct is percent between 0 and 100. Actual speed, if measured, is RPM.</p>
+<p>Control FanPct is percent between 0 and 100. Speed is RPS, maybe.</p>
 <p></p>
 
 <table>
 <tr>
-<td>Current Speed:</td> <td><span id='speed_current'></span></td>
+<td>Current Speed:</td> <td><span id='fan_speed'></span></td>
 </tr>
 
 <tr>
@@ -44,6 +47,10 @@ CheeseFan for Drying!
 
 <tr>
 <td>Date:</td><td><span id='epoch'></span></td>
+</tr>
+
+<tr>
+<td>Uptime:</td><td><span id='uptime'></span></td>
 </tr>
 </table> 
 
@@ -68,8 +75,17 @@ $(document).ready(function() {
 	getFanPctSetpoint();
 	getFanSpeed();
 	getEpoch();
+	getUptime();
 });
 
+// This seems to do poorly with Carolyn's machine.
+// I think the real problem might have been pulling down the original content.
+setInterval(function(){
+	getFanPctSetpoint();
+	getFanSpeed();
+	getEpoch();
+	getUptime();
+},2000);
 
 function  submitNewFanPctSetpoint()
 {
@@ -97,11 +113,10 @@ function getFanSpeed()
 {
 		$.ajax({
 		type: 'GET',
-		url:"/rest/speed",
+		url:"/rest/fan_speed",
 		success: function(data, status, req) {
 			if (data != "") {
-				$("#speed_current").html(data);
-				//var humidity = $.parseJSON(data);
+				$("#fan_speed").html(data);
 			} else {
 				console.log("No data");
 			}
@@ -113,21 +128,6 @@ function getFanSpeed()
 	});
 
 }
-
-function getEpoch()
-{
-	$.ajax({
-		type: 'GET',
-		url: "/rest/epoch",
-		success: function(data, status, req) {
-			if (data != "") {
-				var myDate = new Date(data[0]*1000);
-				$("#epoch").html(myDate.toLocaleString());	
-			}	
-		}
-	});
-}
-
 
 function getFanPctSetpoint()
 {
@@ -148,6 +148,37 @@ function getFanPctSetpoint()
 		}
 	});
 }
+
+
+function getEpoch()
+{
+	$.ajax({
+		type: 'GET',
+		url: "/rest/epoch",
+		success: function(data, status, req) {
+			if (data != "") {
+				var myDate = new Date(data*1000);
+				$("#epoch").html(myDate.toLocaleString());	
+			}	
+		}
+	});
+}
+
+
+function getUptime()
+{
+	$.ajax({
+		type: 'GET',
+		url: "/rest/uptime",
+		success: function(data, status, req) {
+			if (data != "") {
+				$("#uptime").html(data);	
+			}	
+		}
+	});
+}
+
+
 
 <!-- note this sends a little json object which is overkill but might be useful later -->
 

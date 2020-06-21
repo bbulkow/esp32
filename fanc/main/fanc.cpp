@@ -25,7 +25,11 @@
 
 #include "esp_err.h"
 
+#include "esp_log.h"
+static const char *TAG = "fanc";
+
 #include "fanc.h"
+
 
 //
 // These pins and values are for generating a PWM code 
@@ -37,12 +41,14 @@
 #define LEDC_FANC_TIMER_HZ             24000
 #define LEDC_FANC_TIMER_RESOLUTION      LEDC_TIMER_8_BIT
 
-
+// This controls the fan. Connect it to the signal, which is the "outer"
+// pin that's away from the power pins.
 #define LEDC_FANC_GPIO              (18)
 #define LEDC_FANC_CHANNEL            LEDC_CHANNEL_0
 
 //
-// These values are for measuring the speed of the fan
+// These values are for measuring the speed of the fan. A small resistor
+// has to be used as a pullup. See the readme.
 //
 #define FANC_PULSE_COUNT_GPIO       (GPIO_NUM_19)
 #define FANC_PULSE_COUNT_PIN_SEL  (1ULL << FANC_PULSE_COUNT_GPIO)
@@ -79,24 +85,25 @@ static void fanc_persist_restore(void) {
     nvs_handle_t nvs_h;
     esp_err_t err = nvs_open("fanc", NVS_READONLY, &nvs_h);
     if (err != ESP_OK) {
-        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
         return;
     }
 
     // Read
-    printf("Reading restart counter from NVS ... ");
+    ESP_LOGD(TAG, "Reading persitant values  ... ");
     int32_t fan_pct = 100; // value will default to 0, if not set yet in NVS
     err = nvs_get_i32(nvs_h, "fan_pct", &fan_pct);
     switch (err) {
         case ESP_OK:
-            printf("Retrieved: value is %d\n",fan_pct);
+            ESP_LOGD(TAG, "Retrieved: value is %d",fan_pct);
             g_fanc_percentage = fan_pct;
             break;
         case ESP_ERR_NVS_NOT_FOUND:
-            printf("The value is not initialized yet!\n");
+            ESP_LOGI(TAG, "The value is not initialized yet!");
             break;
         default :
-            printf("Error (%s) reading!\n", esp_err_to_name(err));
+            ESP_LOGW(TAG, "Error (%s) reading NVS!", esp_err_to_name(err));
+            break;
     }
 
     // Close
@@ -115,28 +122,30 @@ static void fanc_persist_update(void) {
     nvs_handle_t nvs_h;
     esp_err_t err = nvs_open("fanc", NVS_READWRITE, &nvs_h);
     if (err != ESP_OK) {
-        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+        ESP_LOGW(TAG,"Error (%s) opening NVS handle!", (esp_err_to_name(err)));
         return;
     }
 
     // Write
-    printf("Writing value to NVS ... ");
+    ESP_LOGI(TAG,"Writing value to NVS ... ");
     int32_t fan_pct = g_fanc_percentage; // value will default to 0, if not set yet in NVS
     err = nvs_set_i32(nvs_h, "fan_pct", fan_pct);
     switch (err) {
         case ESP_OK:
-            printf("set: value is %d\n",fan_pct);
+            ESP_LOGD(TAG, "set: value is %d",fan_pct);
             break;
         case ESP_ERR_NVS_NOT_FOUND:
-            printf("The value is not initialized yet!\n");
+            ESP_LOGI(TAG,"The value is not initialized yet!");
             break;
         default :
-            printf("Error (%s) reading!\n", esp_err_to_name(err));
+            ESP_LOGE(TAG,"Error (%s) reading!", (esp_err_to_name(err)) );
+            break;
     }
 
-    printf("Committing updates in NVS ... ");
+    ESP_LOGD(TAG,"Committing updates in NVS ... ");
     err = nvs_commit(nvs_h);
-    printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+    if (err != ESP_OK) { ESP_LOGW(TAG,"NVS Commit failed!"); }
+    else {    ESP_LOGI(TAG, "NVS commit done"); }
 
     // Close
     nvs_close(nvs_h);
@@ -205,7 +214,7 @@ static esp_err_t fanc_pulse_count_init(void) {
 
     err = gpio_config(&pulse_count_gpio);
     if (err != ESP_OK) {
-        printf(" fanc_plus_count: could not configure gpio config\n");
+        ESP_LOGE(TAG, " fanc_pluse_count: could not configure gpio config (%s)",esp_err_to_name(err));
         return(err);
     }
 
@@ -215,23 +224,23 @@ static esp_err_t fanc_pulse_count_init(void) {
     // example does not, a bit odd?
     err = gpio_install_isr_service(0 /* default */);
     if (err != ESP_OK) {
-        printf(" fanc_plus_count: could not add isr handler\n");
+        ESP_LOGE(TAG,"could not install isr service (%s)",esp_err_to_name(err));
         return(err);
     }
 
     err = gpio_isr_handler_add(FANC_PULSE_COUNT_GPIO, fanc_pulse_count_isr, 0 /* param for isr */);
     if (err != ESP_OK) {
-        printf(" fanc_plus_count: could not add isr handler\n");
+        ESP_LOGE(TAG,"could not add isr handler (%s)",esp_err_to_name(err) );
         return(err);
     }
 
     err = gpio_intr_enable(FANC_PULSE_COUNT_GPIO);
     if (err != ESP_OK) {
-        printf(" fanc_plus_count: could enable isr\n");
+        ESP_LOGE(TAG,"could not enable inter (%s)",esp_err_to_name(err) );
         return(err);
     }
 
-    printf(" fanc_pulse: successful init\n");
+    ESP_LOGI(TAG," fanc_pulse: successful init");
     return(ESP_OK);
 }
 
@@ -340,13 +349,13 @@ static void fanc_task(void *pvParameters)
 
     // set up timer0
     err = ledc_timer_config(&ledc_fanc_timer);
-    if (err == ESP_OK) printf(" succeeded configing timer\n");
-    else printf(" could not configure timer: error %d\n",err);
+    if (err == ESP_OK) { ESP_LOGD(TAG, " succeeded configing timer"); }
+    else { ESP_LOGE(TAG," could not configure timer: error %d",err); }
 
     // Set up controller 0, which will start the pin outputting to level 0-
     err = ledc_channel_config(&ledc_fanc_channel);
-    if (err == ESP_OK) printf(" succeeded configing channel\n");
-    else printf(" could not configure channel: error %d\n",err);
+    if (err == ESP_OK) { ESP_LOGD(TAG," succeeded configing channel"); }
+    else { ESP_LOGE(TAG, " could not configure channel: error %d",err); }
 
     // don't want the ledc service yet
     // Initialize fade service.--- let's not get too fancy yet
@@ -359,17 +368,17 @@ static void fanc_task(void *pvParameters)
 
         if (last_value != g_fanc_percentage) {
 
-            printf(" changing fan duty cycle: old value was %d new will be %d\n",last_value,g_fanc_percentage);
+            ESP_LOGI(TAG, " changing fan duty cycle: old value was %d new will be %d",last_value,g_fanc_percentage);
 
             // use the most recent value
             err = ledc_set_duty(LEDC_FANC_SPEED_MODE, LEDC_FANC_CHANNEL, 
                 duty_cycle_calculate(LEDC_FANC_TIMER_RESOLUTION, g_fanc_percentage ));
-            //if (err == ESP_OK) printf(" succeeded setting duty\n");
-            //else printf(" failed setting duty: error %d\n",err);
+            //if (err == ESP_OK) ESP_LOGD(TAG, " succeeded setting duty");
+            //else ESP_LOGW(TAG," failed setting duty: error %d",err);
 
             err = ledc_update_duty(LEDC_FANC_SPEED_MODE, LEDC_FANC_CHANNEL);
-            //if (err == ESP_OK) printf(" succeeded updating duty\n");
-            //else printf(" failed updating duty: error %d\n",err);
+            //if (err == ESP_OK) ESP_LOGD(TAG," succeeded updating duty");
+            //else ESP_LOGW(TAG," failed updating duty: error %d",err);
 
             // write new value
             fanc_persist_update();
@@ -385,9 +394,9 @@ static void fanc_task(void *pvParameters)
         int64_t  now = esp_timer_get_time(); // microseconds?
 
 
-		//printf("pulse counter change: %u was %u now %u\n", pulse_count - g_fanc_previous_pulse_count, g_fanc_previous_pulse_count, pulse_count);
+		ESP_LOGD(TAG,"pulse counter change: %u was %u now %u", pulse_count - g_fanc_previous_pulse_count, g_fanc_previous_pulse_count, pulse_count);
 		g_fanc_rps = ((float)(pulse_count - g_fanc_previous_pulse_count)) / ((now - g_fanc_previous_time) / 1000000.0);
-		//printf(" revs per second: %f\n",g_fanc_rps);
+		ESP_LOGD(TAG, " revs per second: %f",g_fanc_rps);
         g_fanc_previous_pulse_count = pulse_count;
         g_fanc_previous_time = now;
 
@@ -397,10 +406,10 @@ static void fanc_task(void *pvParameters)
 
 
 #if 0
-        printf("LEDC increase duty without fade\n");
+        ESP_LOGI(TAG,"LEDC increase duty without fade");
         for (int i = 0; i <= 100; i+=3) {
 
-            printf("LEDC increase duty = percent %d without fade\n", i);
+            ESP_LOGI(TAG, "LEDC increase duty = percent %d without fade", i);
 
             err = ledc_set_duty(LEDC_TEST_SPEED_MODE, LEDC_TEST_CHANNEL, duty_cycle_calculate(LEDC_TEST_TIMER_RESOLUTION, i ));
             //if (err == ESP_OK) printf(" succeeded setting duty\n");
