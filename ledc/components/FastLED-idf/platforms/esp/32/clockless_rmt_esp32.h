@@ -142,17 +142,12 @@ __attribute__ ((always_inline)) inline static uint32_t __clock_cycles() {
 
 // -- Core or custom driver --- 'builtin' is the core driver which is supposedly slower
 #ifndef FASTLED_RMT_BUILTIN_DRIVER
-
 // NOTE!
-// there is an upstream issue with using the custom driver. This is in https://github.com/espressif/esp-idf/issues/5476
+// there is perhaps an upstream issue with using the builtin driver. This is in https://github.com/espressif/esp-idf/issues/5476
 // In this, it states that in order to use one of the functions, the upstream must be modified.
+// However, master as of 6/29/20, at least, and the builtin driver is broken - it shows the wrong colors.
 // 
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4,1,0)
-#define FASTLED_RMT_BUILTIN_DRIVER true
-#else
 #define FASTLED_RMT_BUILTIN_DRIVER false
-#endif
-
 #endif
 
 // -- Max number of controllers we can support
@@ -279,8 +274,17 @@ protected:
         for (int i = 0; i < FASTLED_RMT_MAX_CHANNELS; i++) {
             gOnChannel[i] = NULL;
 
-            // -- RMT configuration for transmission
+            // -- RMT configuration for transmission --- different in different ESP versions
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4,1,0)
             rmt_config_t rmt_tx = RMT_DEFAULT_CONFIG_TX(mPin, fastled_get_rmt_channel(i) );
+#else
+            rmt_config_t rmt_tx;
+            memset(&rmt_tx, 0, sizeof(rmt_tx));
+            rmt_tx.channel = fastled_get_rmt_channel(i);
+            rmt_tx.gpio_num = mPin;
+            rmt_tx.mem_block_num = 1;
+            rmt_tx.tx_config.carrier_level = RMT_CARRIER_LEVEL_LOW;
+#endif // version before 4.1
 
             rmt_tx.clk_div = DIVIDER;
             // don't wish to have a carrier applied. Therefore carrier_en is false and the extra parameters don't matter.
