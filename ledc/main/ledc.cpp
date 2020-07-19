@@ -44,8 +44,112 @@ extern const TProgmemPalette16 IRAM_ATTR myRedWhiteBluePalette_p;
 
 CRGB leds[NUM_LEDS];
 
+// Going to use the ESP timer system to attempt to get a frame rate.
+// According to the documentation, this is a fairly high priority,
+// and one should attempt to do minimal work - such as dispatching a message to a queue.
+// at first, let's try just blasting pixels on it.
 
-void ChangePalettePeriodically(){
+// Target frames per second
+#define FASTFADE_FPS 30
+
+typedef struct {
+  CHSV color;
+} ledc_fastfade1_t;
+
+static void _ledc_fastfade1_cb(void *param){
+
+  ledc_fastfade1_t *ff = (ledc_fastfade1_t *)param;
+
+  ff->color.hue++;
+
+  //ESP_LOGI(TAG,"fast hsv fade h: %d s: %d v: %d",ff->color.hue,ff->color.s, ff->color.v);
+
+  fill_solid(leds,NUM_LEDS,ff->color);
+
+  FastLED.show();
+
+};
+
+typedef struct {
+  int sweep;
+  CRGB color;
+} ledc_fastfade2_t;
+
+static void _ledc_fastfade2_cb(void *param){
+
+  ledc_fastfade2_t *ff = (ledc_fastfade2_t *)param;
+  int sweep = ff->sweep % 3;
+
+
+  switch (sweep) {
+    // red
+    case 0:
+      ff->color.red+=2;
+      if (ff->color.red == 255) {
+        ff->sweep++;
+        ff->color.red = 0;
+      }
+      break;
+    // greem
+    case 1:
+      ff->color.green+=2;
+      if (ff->color.green == 255) {
+        ff->sweep++;
+        ff->color.green = 0;
+      }
+      break;
+    //blue
+    case 2:
+      ff->color.blue+=2;
+      if (ff->color.blue == 255) {
+        ff->sweep++;
+        ff->color.blue = 0;
+      }
+      break;
+  }
+
+  //ESP_LOGI(TAG,"fast rgb fade r: %d g: %d b: %d",ff->color.red,ff->color.green, ff->color.blue);
+
+  fill_solid(leds,NUM_LEDS,ff->color);
+
+  FastLED.show();
+
+};
+
+static void ledc_fastfade(void *pvParameters){
+
+  ledc_fastfade1_t ff1_t = {
+    .color = CHSV(0/*hue*/,255/*sat*/,255/*value*/)
+  };
+
+  ledc_fastfade2_t ff2_t = {
+    .sweep = 0,
+    .color = CRGB(0/*red*/,0/*green*/,0/*blue*/)
+  };
+
+  esp_timer_create_args_t timer_create_args = {
+        .callback = _ledc_fastfade1_cb,
+        .arg = (void *) &ff1_t,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "fastfade_timer"
+    };
+
+  esp_timer_handle_t timer_h;
+
+  esp_timer_create(&timer_create_args, &timer_h);
+
+  esp_timer_start_periodic(timer_h, 1000000L / FASTFADE_FPS );
+
+  // suck- just trying this
+  while(1){
+
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
+  };
+
+}
+
+
+static void ChangePalettePeriodically(){
 
   int64_t now = esp_timer_get_time();
   uint8_t secondHand = (now / 1000000L ) % 60;
@@ -68,9 +172,9 @@ void ChangePalettePeriodically(){
 
 }
 
-void blinkLeds_interesting(void *pvParameters){
+static void blinkLeds_interesting(void *pvParameters){
   while(1){
-  	 ESP_LOGI(TAG,"blink leds");
+  	 ESP_LOGI(TAG,"blink leds interesting");
     ChangePalettePeriodically();
     
     static uint8_t startIndex = 0;
@@ -80,7 +184,7 @@ void blinkLeds_interesting(void *pvParameters){
         leds[i] = ColorFromPalette( currentPalette, startIndex, 64, currentBlending);
         startIndex += 3;
     }
-    ESP_LOGI(TAG,"show leds\n");
+    ESP_LOGI(TAG,"show leds");
     FastLED.show();
 
     vTaskDelay(400 / portTICK_PERIOD_MS);
@@ -109,13 +213,13 @@ CRGB colors[N_COLORS] = {
   CRGB::Aqua
 };
 
-void blinkLeds_simple(void *pvParameters){
+static void blinkLeds_simple(void *pvParameters){
 
  	while(1){
 
 		for (int j=0;j<N_COLORS;j++) {
 
-			ESP_LOGI(TAG,"blink leds");
+			ESP_LOGI(TAG,"blink leds simple");
 
 			for (int i=0;i<NUM_LEDS;i++) {
 			  leds[i] = colors[j];
@@ -140,7 +244,7 @@ CRGB colors_chase[N_COLORS_CHASE] = {
   CRGB::White,
 };
 
-void blinkLeds_chase(void *pvParameters) {
+static void blinkLeds_chase(void *pvParameters) {
   int pos = 0;
   int led_color = 0;
   while(1){
@@ -189,8 +293,11 @@ esp_err_t ledc_init(void) {
   FastLED.setMaxPowerInVoltsAndMilliamps(12,2000);
 
   // change the task below to one of the functions above to try different patterns
-  ESP_LOGI(TAG,"create task for led blinking");
-  xTaskCreatePinnedToCore(&blinkLeds_simple, "blinkLeds", 6000/*stacksize*/, NULL/*pvparam*/, 5/*pri*/, NULL/*taskhandle*/, tskNO_AFFINITY/*coreid*/);
+  ESP_LOGI(TAG,"create task for led action");
+
+//  xTaskCreatePinnedToCore(&blinkLeds_simple, "blinkLeds", 4000/*stacksize*/, NULL/*pvparam*/, 5/*pri*/, NULL/*taskhandle*/, tskNO_AFFINITY/*coreid*/);
+
+  xTaskCreatePinnedToCore(&ledc_fastfade, "blinkLeds", 4000/*stacksize*/, NULL/*pvparam*/, 5/*pri*/, NULL/*taskhandle*/, tskNO_AFFINITY/*coreid*/);
 
   return(ESP_OK);
 }

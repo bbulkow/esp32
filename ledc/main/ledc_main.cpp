@@ -55,9 +55,9 @@ void app_main(void)
     ESP_LOGI(TAG, " starting wifi");
     wifi_multi_start();
     
-    wifi_multi_ap_add("sisyphus", "xxx");
-    wifi_multi_ap_add("bb-ap-x", "xxx");
-    wifi_multi_ap_add("laertes", "xxx");
+    wifi_multi_ap_add("sisyphus", "!medea4u");
+    wifi_multi_ap_add("bb-ap-x", "landshark");
+    wifi_multi_ap_add("laertes", "!medea4u");
     ESP_LOGI(TAG, "finished configuring wifi");
 
     // why not get network time, if it's out there?
