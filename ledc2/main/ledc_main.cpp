@@ -70,7 +70,7 @@ void app_main(void)
     ledc_init();
 
     // start the webserver
-    //webserver_init();
+    webserver_init();
 
     // start the mdns service, it's helpful
     // going to hard code the name fanc at the moment, seems the project or NVS should have it
