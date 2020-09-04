@@ -368,7 +368,6 @@ esp_err_t webserver_init(void) {
     config.uri_match_fn = httpd_uri_match_wildcard;
     // there's a globaluserctx that gets passed on responses
 
-
     err = httpd_start( &g_httpserver, &config );
     if (err != ESP_OK) {
         ESP_LOGW(TAG,"webserver_init: could not start http server, error %d %s",err,esp_err_to_name(err));

@@ -50,7 +50,7 @@ CRGB leds[NUM_LEDS];
 // at first, let's try just blasting pixels on it.
 
 // Target frames per second
-#define FASTFADE_FPS 30
+#define FASTFADE_FPS 40
 
 typedef struct {
   CHSV color;
@@ -297,7 +297,8 @@ esp_err_t ledc_init(void) {
 
 //  xTaskCreatePinnedToCore(&blinkLeds_simple, "blinkLeds", 4000/*stacksize*/, NULL/*pvparam*/, 5/*pri*/, NULL/*taskhandle*/, tskNO_AFFINITY/*coreid*/);
 
-  xTaskCreatePinnedToCore(&ledc_fastfade, "blinkLeds", 4000/*stacksize*/, NULL/*pvparam*/, 5/*pri*/, NULL/*taskhandle*/, tskNO_AFFINITY/*coreid*/);
+  //xTaskCreatePinnedToCore(&ledc_fastfade, "blinkLeds", 4000/*stacksize*/, NULL/*pvparam*/, 5/*pri*/, NULL/*taskhandle*/, tskNO_AFFINITY/*coreid*/);
+  xTaskCreatePinnedToCore(&ledc_fastfade, "blinkLeds", 6144/*stacksize*/, NULL/*pvparam*/, 10/*pri*/, NULL/*taskhandle*/, 1/*coreid*/);
 
   return(ESP_OK);
 }

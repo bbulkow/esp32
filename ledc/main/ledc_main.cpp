@@ -29,6 +29,63 @@ extern "C" {
     void app_main();
 }
 
+void dump_tasks(void) 
+{
+    TaskStatus_t *pxTaskStatusArray;
+    volatile UBaseType_t uxArraySize, x;
+    uint32_t ulTotalRunTime, ulStatsAsPercentage;
+
+
+ // Take a snapshot of the number of tasks in case it changes while this
+ // function is executing.
+ uxArraySize = uxTaskGetNumberOfTasks();
+
+ // Allocate a TaskStatus_t structure for each task.  An array could be
+ // allocated statically at compile time.
+ pxTaskStatusArray = (TaskStatus_t *) pvPortMalloc( uxArraySize * sizeof( TaskStatus_t ) );
+
+ if ( pxTaskStatusArray == NULL) {
+    printf("could not allocate %d taskstatusarray failing\n",uxArraySize);
+    return;
+ }
+
+ // Generate raw status information about each task.
+ uxArraySize = uxTaskGetSystemState( pxTaskStatusArray, uxArraySize, &ulTotalRunTime );
+
+ // For percentage calculations.
+ ulTotalRunTime /= 100UL;
+
+ if (ulTotalRunTime <= 0) {
+    printf("total run time zero, aborting\n");
+    return;
+ }
+
+ // For each populated position in the pxTaskStatusArray array,
+ // format the raw data as human readable ASCII data
+ for( x = 0; x < uxArraySize; x++ )
+ {
+    TaskStatus_t *ts = &pxTaskStatusArray[x];
+
+     // What percentage of the total run time has the task used?
+     // This will always be rounded down to the nearest integer.
+     // ulTotalRunTimeDiv100 has already been divided by 100.
+     ulStatsAsPercentage = ts->ulRunTimeCounter / ulTotalRunTime;
+
+     if( ulStatsAsPercentage > 0UL ) {
+         printf( "%s\t%u\t%u\t%u\t%u%%\n", ts->pcTaskName, ts->xTaskNumber, ts->uxCurrentPriority, ts->ulRunTimeCounter, ulStatsAsPercentage );
+     }
+     else {
+         // If the percentage is zero here then the task has
+         // consumed less than 1% of the total run time.
+         printf( "%s\t%u\t%u\t%u\t<1%%\n", ts->pcTaskName, ts->xTaskNumber, ts->uxCurrentPriority,  ts->ulRunTimeCounter );
+     }
+
+ }
+
+     // The array is no longer needed, free the memory it consumes.
+  vPortFree( pxTaskStatusArray );
+}
+
 
 void app_main(void)
 {
@@ -76,6 +133,8 @@ void app_main(void)
     // going to hard code the name fanc at the moment, seems the project or NVS should have it
     mdns_init();
     mdns_hostname_set(TAG);
+
+    dump_tasks();
 
     while(1) {
 
