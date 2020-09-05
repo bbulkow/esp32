@@ -34,7 +34,7 @@
 #include "esp_err.h"
 
 #include "esp_log.h"
-static const char *TAG = "ledc";
+static const char *TAG = "ledc2";
 
 #include "ledc.h"
 
@@ -256,11 +256,15 @@ esp_err_t static_uri_handler(httpd_req_t *req) {
 
     esp_err_t err;
 
-    ESP_LOGD(TAG," received static URI request for %s",req->uri);
+    ESP_LOGI(TAG," received static URI request for %s",req->uri);
 
-    // short lived connections
+    // short lived connections - rather key as we have so few
     httpd_resp_set_hdr(req,"Connection","close");
-    httpd_resp_set_hdr(req,"Cache-Control","max-age=99999");
+
+    // normally, we would put the cache high, but we're doing a test to see the effects of flashreads
+    //httpd_resp_set_hdr(req,"Cache-Control","max-age=99999");
+    httpd_resp_set_hdr(req,"Cache-Control","no-cache");
+
 
     size_t query_len = httpd_req_get_url_query_len(req);
     char *query = NULL;

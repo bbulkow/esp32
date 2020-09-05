@@ -121,6 +121,11 @@ typedef struct {
 */
 led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config);
 
+/*
+** helper function allows printing from a fast ISR
+*/
+void ws2812_memorybuf_get(char *b, int *len);
+
 #ifdef __cplusplus
 }
 #endif

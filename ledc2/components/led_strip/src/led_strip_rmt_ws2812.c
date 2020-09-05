@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/cdefs.h>
@@ -49,6 +50,66 @@ typedef struct {
     uint8_t buffer[0];
 } ws2812_t;
 
+
+
+
+
+// going to use this from ws2812_rmt_adapter
+DRAM_ATTR int64_t   g_rmt_micro_prev = 0;
+
+DRAM_ATTR char g_ws2812_memorybuf[1024] = {0};
+DRAM_ATTR char *g_ws2812_memorybuf_write = g_ws2812_memorybuf;
+
+void IRAM_ATTR ws2812_memorybuf_add( char *b ) {
+
+    int buflen = strlen(b);
+
+    // don't overflow
+    int maxbuf = sizeof(g_ws2812_memorybuf) - ( g_ws2812_memorybuf_write - g_ws2812_memorybuf );
+    if ( maxbuf == 0 ) return;
+    if (maxbuf < buflen) buflen = maxbuf;
+
+    memcpy(g_ws2812_memorybuf_write, b, buflen);
+    g_ws2812_memorybuf_write += buflen;
+}
+
+void IRAM_ATTR ws2812_memorybuf_insert( char *b, int buflen ) {
+    // don't overflow
+    int maxbuf = sizeof(g_ws2812_memorybuf) - ( g_ws2812_memorybuf_write - g_ws2812_memorybuf );
+    if ( maxbuf == 0 ) return;
+    if (maxbuf < buflen) buflen = maxbuf;
+
+    memcpy(g_ws2812_memorybuf_write, b, buflen);
+    g_ws2812_memorybuf_write += buflen;
+}
+
+// get from the front... requires a memmove because overlaps.
+// *len input is the size of the buf, return is the length you got
+
+// this will always be the most efficient if you ask for a buffer that's as large as the
+// capture buffer
+void ws2812_memorybuf_get(char *b, int *len) {
+    // amount in the buffer
+    int blen = g_ws2812_memorybuf_write - g_ws2812_memorybuf ;
+    if ( blen == 0 ) {
+        *len = 0;
+        return;
+    }
+    if (blen > *len) {
+        memcpy(b, g_ws2812_memorybuf, *len);
+        int olen = blen - *len;
+        memmove(g_ws2812_memorybuf, g_ws2812_memorybuf_write - olen, olen);
+        g_ws2812_memorybuf_write = g_ws2812_memorybuf + olen;
+    }
+    else {
+        memcpy(b, g_ws2812_memorybuf, blen);
+        g_ws2812_memorybuf_write = g_ws2812_memorybuf;
+        *len = blen;
+    }
+    return;
+}
+
+
 /**
  * @brief Conver RGB data to RMT format.
  *
@@ -60,15 +121,43 @@ typedef struct {
  * @param[in] wanted_num: number of RMT items that want to get
  * @param[out] translated_size: number of source data that got converted
  * @param[out] item_num: number of RMT items which are converted from source data
+ *
+ * HOLD ON. In order to make sure we STOP SENDING this string,
+ * if the time between the last is too long, 
+
+
+
  */
 static void IRAM_ATTR ws2812_rmt_adapter(const void *src, rmt_item32_t *dest, size_t src_size,
         size_t wanted_num, size_t *translated_size, size_t *item_num)
 {
+    // this is almost certainly unnecessary
     if (src == NULL || dest == NULL) {
         *translated_size = 0;
         *item_num = 0;
         return;
     }
+
+    // detect an underflow??
+    int64_t now = esp_timer_get_time();
+    if (now > g_rmt_micro_prev + 10) {
+        char buf[20];
+        int delta = now - g_rmt_micro_prev;
+        // almost certainly less than 32 bit... ???
+        itoa(delta, buf, 10);
+        int l = strlen(buf);
+        buf[l] = '-';
+        ws2812_memorybuf_insert( buf, l+1 );
+
+        // consume all the bytes now...
+        if ( delta > 130) {
+            *translated_size = src_size;
+            *item_num = 0;
+            return;
+        }
+    }
+    g_rmt_micro_prev = now;
+
     const rmt_item32_t bit0 = {{{ ws2812_t0h_ticks, 1, ws2812_t0l_ticks, 0 }}}; //Logical 0
     const rmt_item32_t bit1 = {{{ ws2812_t1h_ticks, 1, ws2812_t1l_ticks, 0 }}}; //Logical 1
     size_t size = 0;
@@ -110,6 +199,9 @@ err:
 
 static esp_err_t ws2812_refresh(led_strip_t *strip, uint32_t timeout_ms)
 {
+    // at the start of a refresh, set the time. These are micros since start
+    g_rmt_micro_prev = esp_timer_get_time();
+
     esp_err_t ret = ESP_OK;
     ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
     STRIP_CHECK(rmt_write_sample(ws2812->rmt_channel, ws2812->buffer, ws2812->strip_len * 3, true) == ESP_OK,

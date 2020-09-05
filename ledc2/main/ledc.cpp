@@ -134,6 +134,14 @@ static void ledc_blinkLeds(void *pvParameters){
         // Flush RGB values to LEDs
         ESP_ERROR_CHECK(strip->refresh(strip, 100));
 
+        // did I get any underflow messages or anything?
+        // could have done this a little easier by just accumulating a buffer in the refresh....
+        int len = 1024;
+        char buf[1025];
+        ws2812_memorybuf_get(buf, &len);
+        buf[len] = 0;
+        printf("ws2182: %s\n",buf);
+
         // wait
         vTaskDelay(EXAMPLE_CHASE_SPEED_MS / portTICK_PERIOD_MS);
     }
@@ -148,10 +156,12 @@ esp_err_t ledc_init(void) {
 
     rmt_config_t config = RMT_DEFAULT_CONFIG_TX( (gpio_num_t) DATA_PIN, RMT_TX_CHANNEL);
     // set counter clock to 40MHz
-    config.clk_div = 2;
+    //config.clk_div = 2;
+    // set counter clock to lower value, means buffer is longer --
+    config.clk_div = 20;
 
     ESP_ERROR_CHECK(rmt_config(&config));
-    ESP_ERROR_CHECK(rmt_driver_install(config.channel, 0, 0));
+    ESP_ERROR_CHECK(rmt_driver_install(config.channel, 0, ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_LEVEL2 ));
 
     // install ws2812 driver
     led_strip_config_t strip_config = LED_STRIP_DEFAULT_CONFIG(NUM_LEDS, (led_strip_dev_t)config.channel);
