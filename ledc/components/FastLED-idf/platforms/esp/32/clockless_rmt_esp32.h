@@ -199,6 +199,9 @@ class ESP32RMTController
 private:
 
     // -- RMT has 8 channels, numbered 0 to 7
+    // NOTE: if you are using MAX_BLOCK not 1, you'll have fewer, 
+    // and you need to "skip around" -- the RMT channels for MAX_BLOCK == 2
+    // are 0, 2, 4, 6.... etc
     rmt_channel_t  mRMT_channel;
 
     // -- Store the GPIO pin
@@ -271,7 +274,15 @@ public:
     //    handler (below), or as a callback from the built-in
     //    interrupt handler. It is static because we don't know which
     //    controller is done until we look it up.
-    static void IRAM_ATTR doneOnChannel(rmt_channel_t channel, void * arg);
+    static void IRAM_ATTR doneOnChannel(int channel, void * arg);
+
+        // -- A controller is done 
+    //    This function is called when a controller finishes writing
+    //    its data. It is called either by the custom interrupt
+    //    handler (below), or as a callback from the built-in
+    //    interrupt handler. It is static because we don't know which
+    //    controller is done until we look it up.
+    static void IRAM_ATTR doneOnRMTChannel(rmt_channel_t rmt_channel, void * arg);
     
     // -- Custom interrupt handler
     //    This interrupt handler handles two cases: a controller is
@@ -397,7 +408,8 @@ protected:
     // -- Convert all pixels to RMT pulses
     //    This function is only used when the user chooses to use the
     //    built-in RMT driver, which needs all of the RMT pulses
-    //    up-front.
+    //    up-front. TODO: this has a large memory allocation which
+    //    could fail, should return an error if so
     void convertAllPixelData(PixelController<RGB_ORDER> & pixels)
     {
         // -- Make sure the data buffer is allocated
