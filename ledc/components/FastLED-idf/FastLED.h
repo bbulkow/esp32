@@ -9,8 +9,7 @@
 #define FASTLED_NO_PINMAP
 
 // prefer I2S? Comment this in.
-// Not the default because haven't tried it as much, does work
-#define FASTLED_ESP32_I2S
+//#define FASTLED_ESP32_I2S
 
 #include "esp32-hal.h"
 
