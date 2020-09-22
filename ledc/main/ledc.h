@@ -12,6 +12,12 @@
 esp_err_t ledc_init(void);
 void ledc_destroy(void);
 
+esp_err_t ledc_led_mode_set(int mode);
+int ledc_led_mode_get(void);
+
+esp_err_t ledc_led_speed_set(int mode);
+int ledc_led_speed_get(void);
+
 esp_err_t webserver_init(void);
 void webserver_destroy();
 

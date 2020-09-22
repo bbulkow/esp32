@@ -130,53 +130,67 @@ esp_err_t rest_uri_handler(httpd_req_t *req) {
     const char *last_slash = strrchr(req->uri, '/');
     last_slash++;
 
-// maintained as example
-#if 0
-    if ( strcmp(last_slash, "fan_pct") == 0) {
+// need to refactor to not repeat so much
+    if ( strcmp(last_slash, "led_mode") == 0) {
 
         if (req->method == HTTP_GET) {
 
-            char fan_pct_str[20];
-            snprintf(fan_pct_str, sizeof(fan_pct_str),"%d",fanc_percentage_get() );
+            char led_mode_str[20];
+            snprintf(led_mode_str, sizeof(led_mode_str),"%d",ledc_led_mode_get() );
 
-            ESP_LOGI(TAG,"rest: sending fan percentage %s",fan_pct_str);
+            ESP_LOGI(TAG,"rest: sending back led mode %s",led_mode_str);
 
             httpd_resp_set_type(req, "text/plain");
-            httpd_resp_sendstr(req, fan_pct_str);
+            httpd_resp_sendstr(req, led_mode_str);
         }
         else if (req->method == HTTP_POST) {
 
-            int new_fan_pct = 0;
-            if (ESP_OK == get_json_value_int(content, "fan_pct",&new_fan_pct)) {
-                ESP_LOGI(TAG,"rest: posted, a fan pct to set: %d",new_fan_pct);
+            int new_led_mode = 0;
+            if (ESP_OK == get_json_value_int(content, "led_mode",&new_led_mode)) {
+                ESP_LOGI(TAG,"rest: posted, a led mode to set: %d",new_led_mode);
 
-                fanc_percentage_set(new_fan_pct);
+                ledc_led_mode_set(new_led_mode);
 
                 // easiest way to say OK?
                 httpd_resp_sendstr(req,"");
             }
             else {
-                ESP_LOGW(TAG," posted, a json with a bad value fan pct");
+                ESP_LOGW(TAG," posted, a json with a bad value led mode");
                 httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"illegal value");
             }
         }
 
     }
-    else if ( strcmp(last_slash, "fan_speed") == 0) {
+    else if ( strcmp(last_slash, "led_speed") == 0) {
 
         if (req->method == HTTP_GET) {
 
-            char fan_speed_str[20];
-            snprintf(fan_speed_str, sizeof(fan_speed_str),"%.1f",fanc_speed_get() );
+            char led_speed_str[20];
+            snprintf(led_speed_str, sizeof(led_speed_str),"%d",ledc_led_speed_get() );
 
-            ESP_LOGI(TAG,"rest: sending fan speed %s",fan_speed_str);
+            ESP_LOGI(TAG,"rest: sending back led speed %s",led_speed_str);
 
             httpd_resp_set_type(req, "text/plain");
-            httpd_resp_sendstr(req, fan_speed_str);
+            httpd_resp_sendstr(req, led_speed_str);
+        }
+        else if (req->method == HTTP_POST) {
+
+            int new_led_speed = 0;
+            if (ESP_OK == get_json_value_int(content, "led_speed",&new_led_speed)) {
+                ESP_LOGI(TAG,"rest: posted, a led mode to set: %d",new_led_speed);
+
+                ledc_led_speed_set(new_led_speed);
+
+                // easiest way to say OK?
+                httpd_resp_sendstr(req,"");
+            }
+            else {
+                ESP_LOGW(TAG," posted, a json with a bad value led mode");
+                httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"illegal value");
+            }
         }
     }
-#endif /* 0 */
-    if ( strcmp(last_slash, "uptime") == 0) {
+    else if ( strcmp(last_slash, "uptime") == 0) {
 
         clock_t cl = clock();
         uint64_t uptime_sec = cl / CLOCKS_PER_SEC;
@@ -311,7 +325,7 @@ esp_err_t root_uri_handler(httpd_req_t *req) {
 
     ESP_LOGI(TAG," received root URI request for %s",req->uri);
 
-    // short lived connections
+    // short lived connections, cache it all
     httpd_resp_set_hdr(req,"Connection","close");
     httpd_resp_set_hdr(req,"Cache-Control","max-age=99999");
 

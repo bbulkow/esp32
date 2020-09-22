@@ -23,6 +23,7 @@
 #include "esp_spi_flash.h"
 
 #include "FastLED.h"
+#include "FX.h"
 
 #include "esp_log.h"
 static const char *TAG = "ledc";
@@ -43,6 +44,10 @@ extern const TProgmemPalette16 IRAM_ATTR myRedWhiteBluePalette_p;
 #define COLOR_ORDER RGB
 
 CRGB leds[NUM_LEDS];
+
+
+
+#if 0
 
 // Going to use the ESP timer system to attempt to get a frame rate.
 // According to the documentation, this is a fairly high priority,
@@ -70,61 +75,10 @@ static void _ledc_fastfade1_cb(void *param){
 
 };
 
-typedef struct {
-  int sweep;
-  CRGB color;
-} ledc_fastfade2_t;
-
-static void _ledc_fastfade2_cb(void *param){
-
-  ledc_fastfade2_t *ff = (ledc_fastfade2_t *)param;
-  int sweep = ff->sweep % 3;
-
-
-  switch (sweep) {
-    // red
-    case 0:
-      ff->color.red+=2;
-      if (ff->color.red == 255) {
-        ff->sweep++;
-        ff->color.red = 0;
-      }
-      break;
-    // greem
-    case 1:
-      ff->color.green+=2;
-      if (ff->color.green == 255) {
-        ff->sweep++;
-        ff->color.green = 0;
-      }
-      break;
-    //blue
-    case 2:
-      ff->color.blue+=2;
-      if (ff->color.blue == 255) {
-        ff->sweep++;
-        ff->color.blue = 0;
-      }
-      break;
-  }
-
-  //ESP_LOGI(TAG,"fast rgb fade r: %d g: %d b: %d",ff->color.red,ff->color.green, ff->color.blue);
-
-  fill_solid(leds,NUM_LEDS,ff->color);
-
-  FastLED.show();
-
-};
-
 static void ledc_fastfade(void *pvParameters){
 
   ledc_fastfade1_t ff1_t = {
     .color = CHSV(0/*hue*/,255/*sat*/,255/*value*/)
-  };
-
-  ledc_fastfade2_t ff2_t = {
-    .sweep = 0,
-    .color = CRGB(0/*red*/,0/*green*/,0/*blue*/)
   };
 
   esp_timer_create_args_t timer_create_args = {
@@ -148,50 +102,103 @@ static void ledc_fastfade(void *pvParameters){
 
 }
 
+#endif /* 0 */
 
-static void ChangePalettePeriodically(){
+WS2812FX *g_ws2812fx = 0;
+bool g_ws2812_mode_random = true;
 
-  int64_t now = esp_timer_get_time();
-  uint8_t secondHand = (now / 1000000L ) % 60;
-  static uint8_t lastSecond = 99;
+esp_err_t ledc_led_mode_set(int mode) {
+  ESP_LOGI(TAG,"ledc: set mode %d",mode);
 
-  if( lastSecond != secondHand) {
-    lastSecond = secondHand;
-    if( secondHand ==  0)  { currentPalette = RainbowColors_p;         currentBlending = LINEARBLEND; }
-    if( secondHand == 10)  { currentPalette = RainbowStripeColors_p;   currentBlending = NOBLEND;  }
-    if( secondHand == 15)  { currentPalette = RainbowStripeColors_p;   currentBlending = LINEARBLEND; }
-    if( secondHand == 20)  { SetupPurpleAndGreenPalette();             currentBlending = LINEARBLEND; }
-    if( secondHand == 25)  { SetupTotallyRandomPalette();              currentBlending = LINEARBLEND; }
-    if( secondHand == 30)  { SetupBlackAndWhiteStripedPalette();       currentBlending = NOBLEND; }
-    if( secondHand == 35)  { SetupBlackAndWhiteStripedPalette();       currentBlending = LINEARBLEND; }
-    if( secondHand == 40)  { currentPalette = CloudColors_p;           currentBlending = LINEARBLEND; }
-    if( secondHand == 45)  { currentPalette = PartyColors_p;           currentBlending = LINEARBLEND; }
-    if( secondHand == 50)  { currentPalette = myRedWhiteBluePalette_p; currentBlending = NOBLEND;  }
-    if( secondHand == 55)  { currentPalette = myRedWhiteBluePalette_p; currentBlending = LINEARBLEND; }
+  if(g_ws2812fx) {
+      WS2812FX::Segment *segments = g_ws2812fx->getSegments();
+      g_ws2812_mode_random = false;
+      // mode has a special setter, unlike many other things
+      for (uint8_t i = 0; i < MAX_NUM_SEGMENTS; i++)
+      {
+        g_ws2812fx->setMode(i, mode);
+        segments[0].colors[0] = 0xff0000; // red for testing
+      }
   }
-
+  return(ESP_OK);
 }
 
-static void blinkLeds_interesting(void *pvParameters){
-  while(1){
-  	 ESP_LOGI(TAG,"blink leds interesting");
-    ChangePalettePeriodically();
-    
-    static uint8_t startIndex = 0;
-    startIndex = startIndex + 1; /* motion speed */
-    
-    for( int i = 0; i < NUM_LEDS; i++) {
-        leds[i] = ColorFromPalette( currentPalette, startIndex, 64, currentBlending);
-        startIndex += 3;
+// will get the default mode 0
+int ledc_led_mode_get(void) {
+  if (!g_ws2812fx) return(-1);
+
+  ESP_LOGI(TAG,"ledc: get mode %d",g_ws2812fx->getMode());
+
+  return(g_ws2812fx->getMode());
+}
+
+/*
+** what is speed?
+** https://github.com/kitesurfer1404/WS2812FX/issues/113
+** it's in milliseconds, so let's multiply / divide by 10
+*/
+
+#define SPEED_FACTOR 10
+
+esp_err_t ledc_led_speed_set(int speed) {
+  speed *= SPEED_FACTOR;
+  ESP_LOGI(TAG,"ledc: set speed %d",speed);
+  if(g_ws2812fx) {
+    WS2812FX::Segment *segments = g_ws2812fx->getSegments();
+    for (uint8_t i = 0; i < MAX_NUM_SEGMENTS; i++)
+    {
+      segments[i].speed = speed;
     }
-    ESP_LOGI(TAG,"show leds");
-    FastLED.show();
+  }
+  return(ESP_OK);
+}
 
-    vTaskDelay(400 / portTICK_PERIOD_MS);
-  };
+// will get the default segment, 0
+int ledc_led_speed_get(void) {  
+  if (!g_ws2812fx) return(-1);
+  ESP_LOGI(TAG,"ledc: get speed %d",g_ws2812fx->getSpeed());
+  return(g_ws2812fx->getSpeed() / SPEED_FACTOR);
+}
 
+
+static void blinkWithFx(void *pvParameters) {
+
+  uint16_t mode = FX_MODE_STATIC;
+
+  WS2812FX ws2812fx;
+  WS2812FX::Segment *segments = ws2812fx.getSegments();
+
+
+  ws2812fx.init(NUM_LEDS, leds, false); // type was configured before
+  ws2812fx.setBrightness(255);
+  ws2812fx.setMode(0 /*segid*/, mode);
+  segments[0].colors[0] = 0xff0000;
+
+  g_ws2812fx = &ws2812fx;
+
+  // microseconds
+  uint64_t mode_change_time = esp_timer_get_time();
+
+  while (true) {
+
+    if (g_ws2812_mode_random &&
+        (mode_change_time + 10000000L) < esp_timer_get_time() ) {
+      mode += 1;
+      mode %= MODE_COUNT;
+      mode_change_time = esp_timer_get_time();
+      ws2812fx.setMode(0 /*segid*/, mode);
+      printf(" changed mode to %d\n", mode);
+    }
+
+    ws2812fx.service();
+    vTaskDelay(10 / portTICK_PERIOD_MS); /*10ms*/
+  }
 };
 
+
+
+
+#if 0
 #define N_COLORS 17
 CRGB colors[N_COLORS] = { 
   CRGB::AliceBlue,
@@ -232,49 +239,8 @@ static void blinkLeds_simple(void *pvParameters){
 		};
 	}
 };
+#endif /* 0 */
 
-#define N_COLORS_CHASE 7
-CRGB colors_chase[N_COLORS_CHASE] = { 
-  CRGB::AliceBlue,
-  CRGB::Lavender,
-  CRGB::DarkOrange,
-  CRGB::Red,
-  CRGB::Green,
-  CRGB::Blue,
-  CRGB::White,
-};
-
-static void blinkLeds_chase(void *pvParameters) {
-  int pos = 0;
-  int led_color = 0;
-  while(1){
-
-  	ESP_LOGI(TAG,"chase leds");
-
-  		// do it the dumb way - blank the leds
-	    for (int i=0;i<NUM_LEDS;i++) {
-	      leds[i] =   CRGB::Black;
-	    }
-
-	    // set the one LED to the right color
-	    leds[pos] = colors_chase[led_color];
-	    pos = (pos + 1) % NUM_LEDS;
-
-	    // use a new color
-	    if (pos == 0) {
-	    	led_color = (led_color + 1) % N_COLORS_CHASE ;
-	    }
-
-	    uint64_t start = esp_timer_get_time();
-	    FastLED.show();
-	    uint64_t end = esp_timer_get_time();
-
-	    ESP_LOGI(TAG,"Show Time: %" PRIu64 ,end-start);
-
-      vTaskDelay(200 / portTICK_PERIOD_MS);
-	};
-
-}
 
 // TODO: errors if errors
 
@@ -295,10 +261,9 @@ esp_err_t ledc_init(void) {
   // change the task below to one of the functions above to try different patterns
   ESP_LOGI(TAG,"create task for led action");
 
-//  xTaskCreatePinnedToCore(&blinkLeds_simple, "blinkLeds", 4000/*stacksize*/, NULL/*pvparam*/, 5/*pri*/, NULL/*taskhandle*/, tskNO_AFFINITY/*coreid*/);
-
-  //xTaskCreatePinnedToCore(&ledc_fastfade, "blinkLeds", 4000/*stacksize*/, NULL/*pvparam*/, 5/*pri*/, NULL/*taskhandle*/, tskNO_AFFINITY/*coreid*/);
-  xTaskCreatePinnedToCore(&ledc_fastfade, "blinkLeds", 6144/*stacksize*/, NULL/*pvparam*/, 10/*pri*/, NULL/*taskhandle*/, 1/*coreid*/);
+  // I think most of the wifi tasks are on 1? or 0? 4000 is enough for tests.... but what about....
+  //xTaskCreatePinnedToCore(&ledc_fastfade, "blinkLeds", 6144/*stacksize*/, NULL/*pvparam*/, 10/*pri*/, NULL/*taskhandle*/, 1/*coreid*/);
+  xTaskCreatePinnedToCore(&blinkWithFx, "blinkLeds", 1024*8 /*stacksize*/, NULL/*pvparam*/, 5 /*pri*/, NULL/*taskhandle*/, 0/*coreid*/);
 
   return(ESP_OK);
 }

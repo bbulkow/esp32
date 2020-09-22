@@ -29,18 +29,21 @@ Led Control Page!
 
 </div> <!-- end header -->
 
-<div id='fan_pct'>
-<h2>Fan Control</h2>
-<p>Control FanPct is percent between 0 and 100. Speed is RPS, maybe.</p>
-<p></p>
+<div id='control'>
+
+<h2>LED Control</h2>
+<p>The mode is a number, see table below</p>
+<p>There are a wide variety of pattern parameters to add eventually</p>
+<p>Speed is generally between 0 and 25, it seems usually stored as a uint8
+	and clamped to those values.
 
 <table>
 <tr>
-<td>Current Speed:</td> <td><span id='fan_speed'></span></td>
+<td>Mode:</td> <td><span id='led_mode'></span></td>
 </tr>
 
 <tr>
-<td>Percent Setpoint:</td> <td><span id='fan_pct_setpoint'></span></td>
+<td>Speed:</td> <td><span id='led_speed'></span></td>
 </tr>
 
 <tr>
@@ -51,90 +54,170 @@ Led Control Page!
 <td>Uptime:</td><td><span id='uptime'></span></td>
 </tr>
 </table> 
+<p></p>
 
-<button onclick="changeFanPctSetpoint()">Change Setpoint</button>
+<button onclick="changeLedMode()">Change Mode</button>
 
-<div id="change_fan_pct_setpoint" class="hidden" title="Change Setpoint">
-	<form onsubmit="return submitNewFanPctSetpoint()">
-	Enter new Percentage Setpoint (0-100):
+<div id="change_led_mode" class="hidden" title="Change Mode">
+	<form onsubmit="return submitNewMode()">
+	Enter new Mode (0-137):
 	<input type="text"></input>
 	<div class="hidden error" style="color:red">
-		 Speed Percentage must be between 0 and 100
+		 Mode must be between 0 and 137
 	</div>
 	<input type="submit">
 	</form>
 </div>
+
+<button onclick="changeLedSpeed()">Change Speed</button>
+
+<div id="change_led_speed" class="hidden" title="Change Speed">
+	<form onsubmit="return submitNewSpeed()">
+	Enter new Speed (0-25):
+	<input type="text"></input>
+	<div class="hidden error" style="color:red">
+		 Speed must be between 0 and 25
+	</div>
+	<input type="submit">
+	</form>
+</div>
+
+
+<table>
+<tr><td>0</td><td>STATIC</td></tr>
+<tr><td>1</td><td>BLINK</td></tr>
+<tr><td>2</td><td>BREATh</td></tr>
+<tr><td>3</td><td>COLOR_WIPE</td></tr>
+<tr><td>4</td><td>COLOR_WIPE_RANDOM</td></tr>
+<tr><td>5</td><td>RANDOM_COLOR</td></tr>
+<tr><td>6</td><td>COLOR_SWEEP</td></tr>
+<tr><td>7</td><td>DYNAMIC</td></tr>
+<tr><td>8</td><td>RAINBOW</td></tr>
+<tr><td>9</td><td>RAINBOW_CYCLE</td></tr>
+<tr><td>10</td><td>SCAN</td></tr>
+<tr><td>11</td><td>DUAL_SCAN</td></tr>
+<tr><td>12</td><td>FADE</td></tr>
+<tr><td>13</td><td>THEATER_CHASE</td></tr>
+<tr><td>14</td><td>THEATER_CHASE_RAINBOW</td></tr>
+<tr><td>15</td><td>RUNNING_LIGHTS</td></tr>
+<tr><td>16</td><td>SAW</td></tr>
+<tr><td>17</td><td>TWINKLE</td></tr>
+<tr><td>18</td><td>DISSOLVE</td></tr>
+<tr><td>19</td><td>DISSOLVE_RANDOM</td></tr>
+<tr><td>20</td><td>SPARKLE</td></tr>
+<tr><td>21</td><td>FLASH_SPARKLE</td></tr>
+<tr><td>22</td><td>HYPER_SPARKLE</td></tr>
+<tr><td>23</td><td>STROBE</td></tr>
+<tr><td>24</td><td>STROBE_RAINBOW</td></tr>
+<tr><td>25</td><td>MULTI_STROBE</td></tr>
+<tr><td>26</td><td>BLINK_RAINBOW</td></tr>
+<tr><td>27</td><td>ANDROID</td></tr>
+<tr><td>28</td><td>CHASE_COLOR</td></tr>
+<tr><td>29</td><td>CHASE_RANDOM</td></tr>
+<tr><td>30</td><td>CHASE_RAINBOW</td></tr>
+<tr><td>31</td><td>CHASE_FLASH</td></tr>
+<tr><td>32</td><td>CHASE_FLASH_RANDOM</td></tr>
+<tr><td>33</td><td>CHASE_RAINBOW_WHITE</td></tr>
+<tr><td>34</td><td>COLORFUL</td></tr>
+<tr><td>35</td><td>TRAFFIC_LIGHT</td></tr>
+<tr><td>36</td><td>COLOR_SWEEP_RANDOM</td></tr>
+<tr><td>37</td><td>RUNNING_COLOR</td></tr>
+<tr><td>38</td><td>RUNNING_RED_BLUE</td></tr>
+<tr><td>39</td><td>RUNNING_RANDOM</td></tr>
+<tr><td>40</td><td>LARSON_SCANNER</td></tr>
+
+</table>
+
+
 </div>
 
 </body>
 
 <script>
 $(document).ready(function() {
-	getFanPctSetpoint();
-	getFanSpeed();
+	getMode();
+	getSpeed();
 	getEpoch();
 	getUptime();
 });
 
-// This seems to do poorly with Carolyn's machine.
-// I think the real problem might have been pulling down the original content.
+//refresh
 setInterval(function(){
-	getFanPctSetpoint();
-	getFanSpeed();
+	getMode();
+	getSpeed();
 	getEpoch();
 	getUptime();
 },2000);
 
-function  submitNewFanPctSetpoint()
+function  submitNewMode()
 {
-	console.log("submit new fan pctcalled");
+	console.log("submit new mode called");
 	try {
-		var newTemp = parseInt($("#change_fan_pct_setpoint input").val());
-		if (isNaN(newTemp) || newTemp < 0 || newTemp > 100) {
-			$('#change_fan_pct_setpoint div.error').css("display", "block");
+		var newMode = parseInt($("#change_led_mode input").val());
+		if (isNaN(newMode) || newMode < 0 || newMode > 137) {
+			$('#change_led_mode div.error').css("display", "block");
 		} else {
-			setTargetFanPct(newTemp);
-			console.log("new fan pct is " + newTemp);
-			$("#change_fan_pct_setpoint").dialog('close');
-			$('#change_fan_pct_setpoint div.error').css("display", "hidden");
-			$("#change_fan_pct_setpoint input[type='text']").val("");
+			setLedMode(newMode);
+			console.log("new mode is " + newMode);
+			$("#change_led_mode").dialog('close');
+			$('#change_led_mode div.error').css("display", "hidden");
+			$("#change_led_mode input[type='text']").val("");
 		}
 	} catch (NumberFormatException) {
-		$('#change_fan_pct_setpoint .error').css("display", "block");
+		$('#change_led_mode .error').css("display", "block");
+	}
+	return false;
+}
+
+function  submitNewSpeed()
+{
+	console.log("submit new speed called");
+	try {
+		var newSpeed = parseInt($("#change_led_speed input").val());
+		if (isNaN(newSpeed) || newSpeed < 0 || newSpeed > 25) {
+			$('#change_led_speed div.error').css("display", "block");
+		} else {
+			setLedSpeed(newSpeed);
+			console.log("new speed is " + newSpeed);
+			$("#change_led_speed").dialog('close');
+			$('#change_led_speed div.error').css("display", "hidden");
+			$("#change_led_speed input[type='text']").val("");
+		}
+	} catch (NumberFormatException) {
+		$('#change_led_speed .error').css("display", "block");
 	}
 	return false;
 }
 
 
-
-function getFanSpeed()
+function getMode()
 {
 		$.ajax({
 		type: 'GET',
-		url:"/rest/fan_speed",
+		url:"/rest/led_mode",
 		success: function(data, status, req) {
 			if (data != "") {
-				$("#fan_speed").html(data);
+				$("#led_mode").html(data);
 			} else {
 				console.log("No data");
 			}
 				
 		},
 		error: function(req,status,errorThrown) {
-			printError("temp get", req, status, errorThrown);
+			printError("led mode get", req, status, errorThrown);
 		}
 	});
 
 }
 
-function getFanPctSetpoint()
+function getSpeed()
 {
 	$.ajax({
 		type: 'GET',
-		url:"/rest/fan_pct",
+		url:"/rest/led_speed",
 		success: function(data, status, req) {
 			if (data != "") {
-				$("#fan_pct_setpoint").html(data);
+				$("#led_speed").html(data);
 				//var humidity = $.parseJSON(data);
 			} else {
 				console.log("No data");
@@ -142,7 +225,7 @@ function getFanPctSetpoint()
 				
 		},
 		error: function(req,status,errorThrown) {
-			printError("fan pct setpoint", req, status, errorThrown);
+			printError("led speed get", req, status, errorThrown);
 		}
 	});
 }
@@ -180,27 +263,48 @@ function getUptime()
 
 <!-- note this sends a little json object which is overkill but might be useful later -->
 
-function setTargetFanPct(fan_pct)
+function setLedMode(led_mode)
 {
-	console.log("attempting to set target fan percent");
+	console.log("attempting to led mode");
 	$.ajax({
 		type: 'POST',
-		url: "/rest/fan_pct",
-		data: "{\"fan_pct\":" + fan_pct + "}",
+		url: "/rest/led_mode",
+		data: "{\"led_mode\":" + led_mode + "}",
 		success: function(data, status,req) {
-			$("#fan_pct .setpoint").html(fan_pct);
+			$("#led_mode .setpoint").html(led_mode);
 		},
 		error: function(req,status,errorThrown) {
-			printError("Could not set fan pct setpoint");
+			printError("Could not set led mode");
 		}
 	});
 }
 
-
-function changeFanPctSetpoint()
+function setLedSpeed(led_speed)
 {
-	$("#change_fan_pct_setpoint").dialog();
+	console.log("attempting to led speed");
+	$.ajax({
+		type: 'POST',
+		url: "/rest/led_speed",
+		data: "{\"led_speed\":" + led_speed + "}",
+		success: function(data, status,req) {
+			$("#led_speed .setpoint").html(led_mode);
+		},
+		error: function(req,status,errorThrown) {
+			printError("Could not set led mode");
+		}
+	});
 }
+
+function changeLedMode()
+{
+	$("#change_led_mode").dialog();
+}
+
+function changeLedSpeed()
+{
+	$("#change_led_speed").dialog();
+}
+
 
 function printError(origin, req, status, errorThrown)
 {
